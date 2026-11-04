@@ -1,5 +1,5 @@
 .PHONY: help setup env up down ps logs data test train train-quick diagram \
-        produce consume e2e slides dashboard clean
+        produce consume e2e slides lettre dashboard clean
 
 PY  := .venv/bin/python
 PIP := .venv/bin/pip
@@ -17,6 +17,7 @@ help:
 	@echo "make e2e          up + produce + consume + vérification de bout en bout"
 	@echo "make diagram      régénère docs/diagrams/architecture.{png,svg}"
 	@echo "make slides       régénère docs/slides.pptx (5 slides, exposé idée)"
+	@echo "make lettre       régénère docs/lettre_motivation.pdf (lettre de motivation)"
 
 setup:
 	python3 -m venv --system-site-packages .venv
@@ -66,6 +67,11 @@ diagram:
 
 slides:
 	$(PY) docs/build_slides.py
+
+lettre:
+	cd docs && pdflatex -interaction=nonstopmode -halt-on-error lettre_motivation.tex > /dev/null
+	@rm -f docs/lettre_motivation.aux docs/lettre_motivation.log docs/lettre_motivation.out
+	@echo "docs/lettre_motivation.pdf régénéré"
 
 dashboard:
 	@echo "Phase 6 — pas encore implémenté"
