@@ -1,5 +1,5 @@
 .PHONY: help setup env up down ps logs data test train train-quick diagram \
-        produce consume e2e dashboard clean
+        produce consume e2e slides dashboard clean
 
 PY  := .venv/bin/python
 PIP := .venv/bin/pip
@@ -16,6 +16,7 @@ help:
 	@echo "make consume      écrit les micro-lots dans S3 local (raw/sales/...)"
 	@echo "make e2e          up + produce + consume + vérification de bout en bout"
 	@echo "make diagram      régénère docs/diagrams/architecture.{png,svg}"
+	@echo "make slides       régénère docs/slides.pptx (5 slides, exposé idée)"
 
 setup:
 	python3 -m venv --system-site-packages .venv
@@ -61,6 +62,9 @@ e2e:
 
 diagram:
 	$(PY) docs/diagrams/architecture.py
+
+slides:
+	$(PY) docs/build_slides.py
 
 dashboard:
 	@echo "Phase 6 — pas encore implémenté"

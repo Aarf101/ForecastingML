@@ -40,6 +40,7 @@ make e2e          # tout enchaîner + vérifier les objets écrits
 make down         # arrêter les conteneurs
 
 make diagram      # régénère docs/diagrams/architecture.{png,svg}
+make slides       # régénère docs/slides.pptx (exposé idée projet, 5 slides)
 ```
 
 ## Ingestion (Phase 3) — la même API que sur AWS
@@ -85,6 +86,15 @@ tests/                 # 30 tests unitaires
 docs/diagrams/         # architecture.py + .png + .svg
 docs/architecture.md   # diagramme documenté, décisions, coûts, plan B
 ```
+
+## Exposé « idée projet » (5 slides)
+
+- **`docs/slides.pptx`** — prêt à présenter (16:9), généré par `make slides`
+- **`docs/slides.md`** — même contenu en Markdown, à copier dans Canva / Google Slides
+
+Plan : ① application et besoin · ② architecture AWS · ③ données et features ·
+④ fonctionnalités et services · ⑤ preuve de faisabilité et planning.
+Chaque slide a des notes d'orateur (onglet « Notes » dans PowerPoint).
 
 ## Choix structurants
 
