@@ -64,6 +64,8 @@ e2e:
 diagram:
 	$(PY) docs/diagrams/architecture.py
 	$(PY) docs/diagrams/architecture_simple.py
+	$(PY) docs/diagrams/architecture_medium.py
+	$(PY) docs/diagrams/architecture_split.py
 
 slides:
 	$(PY) docs/build_slides.py
