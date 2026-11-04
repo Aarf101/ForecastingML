@@ -1,0 +1,22 @@
+# --- python ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# --- secrets / config locale ---
+.env
+
+# --- données : jamais versionnées (volumineuses, reproductibles) ---
+data/raw/*
+data/curated/*
+data/forecast/*
+!data/*/.gitkeep
+
+# --- artefacts ---
+*.log
+nohup.out
+.DS_Store

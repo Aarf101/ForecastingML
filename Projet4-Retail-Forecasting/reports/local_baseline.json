@@ -1,0 +1,24 @@
+{
+  "horizon": 1,
+  "n_train": 732000,
+  "n_valid": 67200,
+  "n_test": 33600,
+  "best_iteration": 398,
+  "test_wape": 0.42989778491035296,
+  "test_rmse": 4.0285308868097465,
+  "baseline_wape": 0.5682323261331554,
+  "baseline_rmse": 5.355059912518875,
+  "improvement_vs_baseline": 0.24344715156241598,
+  "feature_importance": {
+    "roll_mean_7": 1804,
+    "dow": 1779,
+    "roll_mean_28": 1684,
+    "roll_mean_14": 1661,
+    "week": 1424,
+    "lag_28": 1421,
+    "lag_35": 1389,
+    "day": 1327,
+    "lag_7": 1248,
+    "lag_14": 1236
+  }
+}

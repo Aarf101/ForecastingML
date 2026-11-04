@@ -1,0 +1,13 @@
+# Projet 4 — Retail ML Forecasting
+# Phase 0-2 : développement local (CPU). Voir requirements-aws.txt pour la Phase 3+.
+
+pandas>=2.1
+numpy>=1.26
+pyarrow>=15.0
+scikit-learn>=1.4
+lightgbm>=4.3
+matplotlib>=3.8
+python-dotenv>=1.0
+
+# tests
+pytest>=8.0
