@@ -24,18 +24,28 @@ XS = [0.24 + BW / 2 + i * PITCH for i in range(7)]
 Y = 1.175
 
 F = "DejaVu Sans"
+
+# Thème sombre : fond violet profond, cartes violet foncé, bordures colorées.
+BG = "#1E1033"
+CARD = "#341B52"
+MAIN_TXT = "#FFFFFF"
+SUB_TXT = "#C3AEDC"
+ARROW = "#9B8AB8"
+
 STEPS = [
-    ("Ventes", "POS · CSV", "#eef3f8", "#4a7fb5"),
-    ("Kafka", "MSK", "#fff4e3", "#e08a00"),
-    ("S3 + ETL", "Glue", "#e9f5ea", "#2e7d32"),
-    ("SageMaker", "Training", "#e4f0fb", "#1565c0"),
-    ("Prévisions", "P10 · P50 · P90", "#f4ecfa", "#7b1fa2"),
-    ("Agent LLM", "LangGraph", "#efe9f8", "#5e35b1"),
-    ("Dashboard", "Streamlit", "#fdeaf1", "#ad1457"),
+    ("Ventes", "POS · CSV", CARD, "#7EA6E0"),
+    ("Kafka", "MSK", CARD, "#F0A73C"),
+    ("S3 + ETL", "Glue", CARD, "#5FBF72"),
+    ("SageMaker", "Training", CARD, "#6FA8F5"),
+    ("Prévisions", "P10 · P50 · P90", CARD, "#B98BE6"),
+    ("Agent LLM", "LangGraph", CARD, "#A78BFA"),
+    ("Dashboard", "Streamlit", CARD, "#F2719E"),
 ]
 
 fig, ax = plt.subplots(figsize=(W, H))
 fig.subplots_adjust(0, 0, 1, 1)
+fig.patch.set_facecolor(BG)
+ax.set_facecolor(BG)
 ax.set_xlim(0, W)
 ax.set_ylim(0, H)
 ax.axis("off")
@@ -47,16 +57,16 @@ for x, (main, sub, fill, edge) in zip(XS, STEPS):
             BW,
             BH,
             boxstyle="round,pad=0.012,rounding_size=0.12",
-            linewidth=1.6,
+            linewidth=1.8,
             edgecolor=edge,
             facecolor=fill,
             zorder=3,
         )
     )
     ax.text(x, Y + 0.16, main, ha="center", va="center", fontsize=13.5,
-            weight="bold", family=F, color="#111111", zorder=4)
+            weight="bold", family=F, color=MAIN_TXT, zorder=4)
     ax.text(x, Y - 0.24, sub, ha="center", va="center", fontsize=10,
-            family=F, color="#5a6b7b", zorder=4)
+            family=F, color=SUB_TXT, zorder=4)
 
 for left, right in zip(XS[:-1], XS[1:]):
     ax.add_patch(
@@ -66,11 +76,11 @@ for left, right in zip(XS[:-1], XS[1:]):
             arrowstyle="-|>",
             mutation_scale=13,
             linewidth=1.6,
-            color="#5f5f5f",
+            color=ARROW,
             zorder=2,
         )
     )
 
-fig.savefig(OUT / "architecture_simple.png", dpi=190, facecolor="white")
-fig.savefig(OUT / "architecture_simple.svg", facecolor="white")
+fig.savefig(OUT / "architecture_simple.png", dpi=190, facecolor=BG)
+fig.savefig(OUT / "architecture_simple.svg", facecolor=BG)
 print("rendered")
