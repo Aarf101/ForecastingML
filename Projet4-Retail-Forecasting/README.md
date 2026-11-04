@@ -16,7 +16,8 @@ Diagramme détaillé et justifications : **[docs/architecture.md](docs/architect
 | 0 | Squelette du repo, config, venv, tests | ✅ |
 | 1 | Données : générateur synthétique (schéma compatible M5/Rossmann) | ✅ |
 | 2 | Features + métriques + baseline LightGBM locale | ✅ |
-| 3 | Ingestion Kafka → S3 → Glue (Redpanda/MinIO en local) | ⏳ |
+| 3a | Ingestion Kafka → S3 (Redpanda + s3mock en local) | ✅ |
+| 3b | ETL : nettoyage/dédup → `curated/` Parquet (Glue en AWS) | ⏳ |
 | 4 | SageMaker : Processing / Training / HPO / Pipelines / Registry | ⏳ |
 | 5 | Agent LLM LangGraph + RAG | ⏳ |
 | 6 | Dashboard Streamlit | ⏳ |
@@ -26,12 +27,37 @@ Diagramme détaillé et justifications : **[docs/architecture.md](docs/architect
 
 ```bash
 make setup        # venv .venv + dépendances (CPU)
+make env          # .env (S3 local par défaut)
 make data         # 876 000 lignes -> data/raw/sales.parquet
-make test         # 30 tests (features, métriques, générateur)
+make test         # 42 tests (features, métriques, générateur, ingestion)
 make train-quick  # LightGBM sur 20 % des séries (~3 s)
 make train        # run complet (1 200 séries, ~40 s sur 11 cœurs)
+
+make up           # Redpanda (Kafka) + console + s3mock (S3)  [docker]
+make produce      # 5 000 ventes rejouées dans sales.events
+make consume      # micro-lots gzip -> s3://retail-forecast-local/raw/sales/
+make e2e          # tout enchaîner + vérifier les objets écrits
+make down         # arrêter les conteneurs
+
 make diagram      # régénère docs/diagrams/architecture.{png,svg}
 ```
+
+## Ingestion (Phase 3) — la même API que sur AWS
+
+```
+data/raw/sales.parquet ──producer──> topic sales.events ──consumer──> S3 raw/
+                                                                            └─ raw/sales/ingest_date=YYYY-MM-DD/batch-*.json.gz
+```
+
+| Rôle | Local (Docker) | AWS (Learner Lab) |
+|------|----------------|-------------------|
+| Bus d'événements | Redpanda `localhost:19092` | MSK ou Kinesis Data Streams |
+| Buffer 60 s | consumer (flush par taille/temps) | Firehose |
+| Stockage brut | s3mock `localhost:9090` | S3 |
+
+Sémantique **at-least-once** : le commit Kafka n'a lieu qu'après l'écriture de
+l'objet → un crash peut dupliquer un lot, l'ETL déduplique sur
+`(store_id, item_id, date)`. Console Kafka : <http://localhost:8080>.
 
 ## Résultat de référence (local, horizon 1 jour)
 

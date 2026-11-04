@@ -125,3 +125,20 @@ make diagram          # ou : python3 docs/diagrams/architecture.py
 Le script ne dépend que de `matplotlib` ; il écrit `architecture.png` (190 dpi)
 et `architecture.svg` dans `docs/diagrams/`.
 
+## 8. Équivalents locaux (développement sans AWS)
+
+Le code ne change pas : seules les variables d'environnement changent.
+
+| Brique | AWS | Local (Docker) | Variable |
+|--------|-----|----------------|----------|
+| Bus d'événements | MSK / Kinesis | **Redpanda** (`:19092`) | `KAFKA_BOOTSTRAP` |
+| Buffer micro-lot | Firehose | consumer (flush taille/temps) | `--batch-size`, `--flush-seconds` |
+| Stockage objet | S3 | **s3mock** (`:9090`) | `S3_ENDPOINT_URL` |
+| ETL | Glue (PySpark) | pandas (`features/build.py`) | — |
+| Entraînement | SageMaker Training | LightGBM local | — |
+| LLM | Bedrock | Ollama | `LLM_PROVIDER` |
+
+Vérifié de bout en bout : 2 000 événements → 4 objets gzip de 500 messages dans
+`s3://retail-forecast-local/raw/sales/ingest_date=…/` (`make e2e`).
+
+

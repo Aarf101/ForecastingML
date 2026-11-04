@@ -1,0 +1,60 @@
+# Ingestion locale du projet 4 — aucun service AWS requis.
+#
+#   docker compose up -d          # Redpanda + console + S3 local (s3mock)
+#   make produce                  # rejoue data/raw/sales.parquet dans Kafka
+#   make consume                  # écrit les micro-lots dans le S3 local
+#
+# Kafka      : localhost:19092          (API Kafka standard -> même code qu'avec MSK)
+# Console    : http://localhost:8080
+# S3 (émulé) : http://localhost:9090    (s3mock, API S3 compatible boto3)
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: retail-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:29092,OUTSIDE://localhost:19092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=localhost:8082
+    ports:
+      - "19092:19092"   # bootstrap servers pour l'hôte
+      - "9644:9644"     # admin API
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  console:
+    image: redpandadata/console:latest
+    container_name: retail-console
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+    ports:
+      - "8080:8080"
+    depends_on:
+      redpanda:
+        condition: service_started
+
+  s3mock:
+    image: adobe/s3mock:latest
+    container_name: retail-s3mock
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${S3_BUCKET:-retail-forecast-local}
+      COM_ADOBE_TESTING_S3MOCK_STORE_REGION: ${AWS_REGION:-us-east-1}
+    ports:
+      - "9090:9090"     # API S3 (compatible boto3 / aws-cli)
+
+volumes:
+  redpanda-data:
+

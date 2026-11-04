@@ -26,12 +26,19 @@ DOCS_DIR = ROOT / "docs"
 
 
 def _load_dotenv() -> None:
-    """Charge ``.env`` si python-dotenv est installé (optionnel en CI)."""
+    """Charge ``.env`` si python-dotenv est installé (optionnel en CI).
+
+    Les variables AWS laissées vides dans ``.env`` sont supprimées : sinon boto3
+    reçoit ``AWS_PROFILE=""`` et lève un ``ProfileNotFound``.
+    """
     try:
         from dotenv import load_dotenv
     except ImportError:  # pragma: no cover - dépendance optionnelle
         return
     load_dotenv(ROOT / ".env")
+    for key in ("AWS_PROFILE", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+        if os.environ.get(key) == "":
+            os.environ.pop(key)
 
 
 @dataclass(frozen=True)
@@ -42,6 +49,9 @@ class Settings:
     role_arn: str
     bucket: str
     profile: str
+    s3_endpoint_url: str
+    s3_access_key: str
+    s3_secret_key: str
     ingest_backend: str
     kafka_bootstrap: str
     kafka_topic: str
@@ -62,6 +72,9 @@ class Settings:
             role_arn=e.get("SAGEMAKER_ROLE_ARN", ""),
             bucket=e.get("S3_BUCKET", ""),
             profile=e.get("AWS_PROFILE", ""),
+            s3_endpoint_url=e.get("S3_ENDPOINT_URL", ""),
+            s3_access_key=e.get("AWS_ACCESS_KEY_ID", ""),
+            s3_secret_key=e.get("AWS_SECRET_ACCESS_KEY", ""),
             ingest_backend=e.get("INGEST_BACKEND", "kafka").lower(),
             kafka_bootstrap=e.get("KAFKA_BOOTSTRAP", "localhost:19092"),
             kafka_topic=e.get("KAFKA_TOPIC", "sales.events"),
