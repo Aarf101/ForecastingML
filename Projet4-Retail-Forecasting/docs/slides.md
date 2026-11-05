@@ -1,103 +1,100 @@
-# Exposé idée projet — 5 slides
+# Exposé idée projet — 5 slides (langage simple)
 
-> Projet 4 · Retail ML Forecasting · binôme · MIT 2026
-> Version imprimable : `docs/slides.pptx` (généré par `make slides`).
-> Version éditable Canva/Google Slides : copier le contenu ci-dessous.
+> Projet 4 · Retail ML Forecasting · MIT 2026
+> Version à présenter : `docs/slides.pptx`. Script parlé : `docs/script.md`.
 
 ---
 
 ## Slide 1 — L'application et le besoin
 
-**Titre** : Retail ML Forecasting — anticiper la demande, magasin par magasin
+**Titre** : Prévoir la demande produit, magasin par magasin
 
-**Le besoin**
-- Aujourd'hui : réassort à l'expertise, pas de prévision chiffrée ni d'intervalle de confiance
-- Rupture de stock → ventes perdues et clients mécontents
-- Surstock → trésorerie immobilisée et démarques
-- Objectif : prévoir les ventes **J+1 à J+28** par (magasin, article), avec une incertitude exploitable
+**Le problème**
+- Aujourd'hui, on commande « au feeling ».
+- On commande trop peu : rupture de stock, ventes perdues.
+- On commande trop : stock qui dort, démarques.
+- On veut une prévision par magasin et par article, pour les 28 prochains jours.
+- Et une fourchette (« entre X et Y »), pas un chiffre unique.
 
 **Pour qui ?**
-- Responsable approvisionnement / category manager → décisions de réassort
-- Chef de rayon → priorisation des ruptures
-- Direction → pilotage par KPI (taux de rupture, surstock, WAPE)
+- Le responsable des commandes : décider des réassorts.
+- Le chef de rayon : savoir quoi traiter en premier.
+- La direction : suivre un indicateur simple, le taux d'erreur.
 
-**L'application** : une console de pilotage de la demande (dashboard + agent conversationnel) qui répond en langage naturel et déclenche le réentraînement.
+**L'outil** : un tableau de bord, plus un assistant qui explique chaque prévision.
 
-**Bandeau KPI** : `WAPE cible < 30 %` · `horizon 28 jours` · `1 200 séries suivies`
+**Trois chiffres** : `erreur < 30 %` · `horizon 28 jours` · `1 200 séries suivies`
 
-*Notes orateur (45 s)* : on part d'un constat terrain simple — le réassort se fait à l'expérience. On veut le transformer en décision chiffrée, avec une fourchette de risque, pas juste un chiffre moyen.
+*Notes orateur* : on part d'un problème simple — les commandes se font à l'expérience. On veut les transformer en décision chiffrée, avec une marge d'erreur.
 
 ---
 
-## Slide 2 — L'architecture retenue
+## Slide 2 — L'architecture
 
-**Titre** : Une architecture AWS en 8 étapes, du flux de caisse au dashboard
+**Titre** : Un chemin simple, de la vente à la prévision
 
 `![Architecture](diagrams/architecture.png)`
 
-- **Ingestion** : événements de vente → Kafka/MSK → Firehose (micro-lot 60 s) → S3 `raw/`
-- **Données** : S3 `raw/` → Glue ETL (nettoyage, déduplication) → S3 `curated/` Parquet, requêtable dans Athena
-- **ML** : SageMaker Processing (features) → Training (LightGBM) + HPO → évaluation WAPE avec porte de qualité → Model Registry → endpoint + batch 28 j
-- **IA & restitution** : agent LangGraph (Bedrock) qui interroge les prévisions et les documents → Streamlit / QuickSight
-- **Industrialisation** : EventBridge + Step Functions (réentraînement quotidien), CloudWatch, versioning S3, tags de coût
+- **Les ventes arrivent** en continu, une par une (Kafka).
+- **Elles sont stockées** dans S3, dans une zone brute.
+- **Elles sont nettoyées** (Glue) puis rangées dans une zone propre.
+- **SageMaker calcule** les variables, entraîne le modèle et produit les prévisions.
+- **Streamlit affiche** le résultat pour le responsable.
+- **Un bandeau MLOps** lance tout seul le travail chaque jour.
 
-*Notes orateur (60 s)* : insister sur les deux natures de flux — le batch quotidien (prévision 28 j) et le temps réel (endpoint pour les questions de l'agent). Et sur le fait que chaque brique coûteuse a un substitut gratuit prévu pour le Learner Lab (Kafka open-source, Ollama, Streamlit), ce qui est documenté dans `docs/architecture.md`.
+*Notes orateur* : insister sur deux choses — rien n'est perdu en route (Kafka), et tout est automatique (EventBridge, Step Functions).
 
 ---
 
 ## Slide 3 — Les données
 
-**Titre** : Des jeux publics riches, un simulateur en plan B
+**Titre** : Des données publiques, prêtes à l'emploi
 
-**Sources**
-- **M5 (Walmart, Kaggle)** : 30 490 séries, 1 941 jours, prix, promotions, calendrier, hiérarchie article/magasin (~450 Mo)
-- **Rossmann (Kaggle)** : 1 115 magasins, 942 jours, promotions et état des magasins
-- **Plan B — simulateur maison** : 876 000 lignes (20 magasins × 60 articles × 730 jours), même schéma que M5, saisonnalité/promos/ruptures contrôlées
+**D'où elles viennent**
+- **M5 (Walmart)** : 30 490 séries, 2 ans, avec prix, promotions et calendrier.
+- **Rossmann** : 1 115 magasins, 942 jours.
+- **Store Sales (Kaggle)** : un troisième exemple si besoin.
+- **Plan B** : un simulateur maison, 876 000 lignes, même format.
 
-**Ce qu'on en fait**
-- Cible : ventes à `J+h`, h = 1…28 (direct multi-horizon)
-- Features : lags 1/7/14/21/28/35, moyennes et écarts-types glissants 7/14/28, jour de semaine, semaine, fériés, promo, prix, lead time magasin
-- Découpage **temporel** : dernier mois = test, mois précédent = validation
-- Pièges traités : **3,6 % de jours en rupture** (ventes censurées) et doublons d'ingestion → déduplication sur (magasin, article, date) ; `stock_on_hand` exclu des features (fuite)
+**Ce qu'on en tire**
+- **Ce qu'on prédit** : la quantité vendue dans n jours.
+- **Les repères** : les ventes des 7, 14 et 28 derniers jours (moyenne et variabilité).
+- **Le contexte** : jour de la semaine, jours fériés, promotions, prix, délai de livraison.
+- **La règle** : on coupe dans le temps. Le dernier mois sert à tester, celui d'avant à valider.
 
-*Notes orateur (45 s)* : le point à faire passer, c'est qu'on sait déjà quel piège va nous mordre — la censure par rupture de stock et les doublons at-least-once de Kafka. Les deux sont traités explicitement.
+*Notes orateur* : le point à faire passer — on ne mélange jamais passé et futur, sinon on croit que le modèle marche alors qu'il triche.
 
 ---
 
 ## Slide 4 — Fonctionnalités et services
 
-**Titre** : Ce que l'application offrira, et avec quels services
+**Titre** : Ce que l'outil fera, et avec quoi
 
 **Fonctionnalités**
-- Prévisions 28 jours par magasin/article avec **P10 / P50 / P90** → stock de sécurité
-- Tableau de bord : prévu vs réalisé, top dérives, liste des risques de rupture
-- Agent conversationnel : « quel risque sur l'article I012 au magasin S03 la semaine prochaine ? » → chiffre, cause, action de réassort
-- Brief hebdomadaire généré automatiquement (Markdown + e-mail) et alertes seuil
+- Une prévision à 28 jours, avec trois niveaux : bas, central, haut.
+- Le niveau haut sert à calculer le **stock de sécurité**.
+- Un **tableau de bord** : prévu contre réalisé, grosses erreurs, risques de rupture.
+- Un **résumé automatique** chaque semaine, par mail, avec des alertes.
 
-**Services mobilisés**
-- Stockage & ingestion : **S3**, **Glue / Lambda**, **Kinesis / MSK**
-- ML : **SageMaker** (Processing, Training, HPO, Pipelines, Registry, Endpoint, Model Monitor)
-- IA : **Bedrock** + LangChain/LangGraph, RAG FAISS sur les documents promo et lead times
-- Restitution : **QuickSight** (option production) ou **Streamlit**
-- Orchestration & MLOps : **EventBridge**, **Step Functions**, **CloudWatch**
+**Services**
+- **Stocker et recevoir** : S3, Glue ou Lambda, Kinesis ou MSK.
+- **Apprendre** : SageMaker (préparation, entraînement, registre, surveillance).
+- **Expliquer** : Bedrock, en option, pour rédiger le résumé.
+- **Afficher** : Streamlit, ou QuickSight en option.
 
-*Notes orateur (60 s)* : la valeur ajoutée n'est pas le modèle seul, c'est la boucle complète — la prévision alimente une décision, et l'agent explique la décision. C'est ce qui distingue le projet d'un simple notebook.
+*Notes orateur* : la valeur n'est pas le modèle seul, c'est la chaîne complète : la prévision devient une décision, et le résumé explique la décision.
 
 ---
 
-## Slide 5 — Preuve de faisabilité et suite
+## Slide 5 — Où on en est
 
-**Titre** : Déjà exécuté en local, le reste tient au crédit Learner Lab
+**Titre** : Ce qui marche déjà, sans AWS
 
-**Résultats obtenus (sans AWS)**
-- 876 000 lignes générées, **42 tests unitaires** verts
-- **WAPE 0.430** (LightGBM + features) contre **0.568** pour la baseline « même jour de la semaine précédente » → **−24,3 %**
-- Ingestion **Kafka → S3** validée : 2 000 événements → 4 objets gzip partitionnés
-- Diagramme et documentation d'architecture prêts
+- 876 000 lignes de données générées et **42 tests** qui passent.
+- Le flux **Kafka → S3** fonctionne : 2 000 ventes donnent 4 fichiers.
+- Modèle local : **erreur 43 %**, contre **57 %** pour la méthode simple (« le même jour la semaine dernière »), soit **24 % de mieux**.
+- Le schéma et la documentation sont prêts.
 
-**Prochaines étapes (7 semaines)**
-- S1 : données + SageMaker Studio · S2 : conception du pipeline + S3
-- S3 : ingestion + ETL · S4 : modélisation SageMaker + HPO
-- S5 : agent LLM · S6 : dashboard · S7 : rapport, vidéo 2 min, soutenance
+**La suite** : entraîner sur SageMaker, brancher le tableau de bord, puis le résumé automatique.
 
-*Notes orateur (45 s)* : on arrive avec un pipeline qui tourne déjà, pas avec des slides. Le reste du temps sert à porter ce pipeline sur AWS et à soigner la démonstration.
+*Notes orateur* : on arrive avec quelque chose qui tourne, pas avec des slides. Le temps restant sert à le porter sur AWS et à préparer la démonstration.

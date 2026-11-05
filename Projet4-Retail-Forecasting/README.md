@@ -91,10 +91,24 @@ docs/architecture.md   # diagramme documenté, décisions, coûts, plan B
 
 - **`docs/slides.pptx`** — prêt à présenter (16:9), généré par `make slides`
 - **`docs/slides.md`** — même contenu en Markdown, à copier dans Canva / Google Slides
+- **`docs/script.md`** — script parlé mot à mot pour les 3 diapositives de `pres.pdf` (+ questions du jury)
 
 Plan : ① application et besoin · ② architecture AWS · ③ données et features ·
 ④ fonctionnalités et services · ⑤ preuve de faisabilité et planning.
 Chaque slide a des notes d'orateur (onglet « Notes » dans PowerPoint).
+
+
+## Diagrammes (5 versions, toutes générées par code)
+
+| Version | Fichier | Usage |
+|---------|---------|-------|
+| Détaillée (8 étapes + notes) | `docs/diagrams/architecture.png` | rapport |
+| Intermédiaire (16 blocs, icônes AWS) | `docs/diagrams/architecture_medium.png` | slide / oral |
+| **Entraînement** (données → modèle → registre) | `docs/diagrams/architecture_training.png` | slide |
+| **Inférence** (registre → prévisions → dashboard) | `docs/diagrams/architecture_inference.png` | slide |
+| Simple (7 blocs) | `docs/diagrams/architecture_simple.png` | rappel 10 s |
+
+`make diagram` régénère les cinq. Icônes officielles dans `docs/diagrams/icons/`.
 
 ## Choix structurants
 
