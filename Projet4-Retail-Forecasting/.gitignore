@@ -20,3 +20,6 @@ data/forecast/*
 *.log
 nohup.out
 .DS_Store
+
+# LibreOffice / bureautique
+.~lock.*
