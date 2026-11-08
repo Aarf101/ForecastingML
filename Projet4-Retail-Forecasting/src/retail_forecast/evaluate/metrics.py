@@ -50,6 +50,20 @@ def rmse(y_true: Iterable[float], y_pred: Iterable[float]) -> float:
     return float(np.sqrt(np.mean((t - p) ** 2)))
 
 
+def bias(y_true: Iterable[float], y_pred: Iterable[float]) -> float:
+    """Biais relatif signé = ``sum(y_pred - y_true) / sum(y_true)``.
+
+    Positif = surestimation systématique (surstock, trésorerie immobilisée) ;
+    négatif = sous-estimation (risque de rupture). Un modèle peut avoir un WAPE
+    correct et un biais important : les deux se lisent ensemble.
+    """
+    t, p = _as_arrays(y_true, y_pred)
+    denom = np.abs(t).sum()
+    if denom == 0:
+        return 0.0 if np.allclose(p, 0) else float("inf")
+    return float((p - t).sum() / denom)
+
+
 def pinball_loss(
     y_true: Iterable[float], y_pred: Iterable[float], quantile: float
 ) -> float:
@@ -74,4 +88,5 @@ def evaluate(
         f"{prefix}wape": wape(y_true, y_pred),
         f"{prefix}mape": mape(y_true, y_pred),
         f"{prefix}rmse": rmse(y_true, y_pred),
+        f"{prefix}bias": bias(y_true, y_pred),
     }

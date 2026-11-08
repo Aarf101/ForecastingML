@@ -22,7 +22,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-from retail_forecast.evaluate.metrics import rmse, wape
+from retail_forecast.evaluate.metrics import bias, rmse, wape
 from retail_forecast.features.build import build_features, time_split, xy
 
 DEFAULT_PARAMS = {
@@ -110,8 +110,10 @@ def train_local(
         "best_iteration": int(model.best_iteration_ or p["n_estimators"]),
         "test_wape": model_wape,
         "test_rmse": rmse(y_te, pred),
+        "test_bias": bias(y_te, pred),
         "baseline_wape": base_wape,
         "baseline_rmse": rmse(y_te, base),
+        "baseline_bias": bias(y_te, base),
         "improvement_vs_baseline": (base_wape - model_wape) / base_wape,
         "feature_importance": (
             pd.Series(model.feature_importances_, index=X_tr.columns)
@@ -145,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
           f"  (gain {res['improvement_vs_baseline']:+.1%})")
     print(f"[local] RMSE  modèle  : {res['test_rmse']:.3f}"
           f"   baseline: {res['baseline_rmse']:.3f}")
+    print(f"[local] biais modèle  : {res['test_bias']:+.1%}"
+          f"   baseline: {res['baseline_bias']:+.1%}")
     print(f"[local] best_iter={res['best_iteration']}")
     print("[local] top features :")
     for name, score in res["feature_importance"].items():

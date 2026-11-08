@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from retail_forecast.evaluate.metrics import evaluate, mape, pinball_loss, rmse, wape
+from retail_forecast.evaluate.metrics import bias, evaluate, mape, pinball_loss, rmse, wape
 
 
 def test_wape_hand_computed():
@@ -36,6 +36,20 @@ def test_pinball_penalises_under_forecast_more_at_p90():
     assert under > over
 
 
+def test_bias_sign_and_value():
+    # surestimation : (12-10) + (18-20) = 0 -> biais nul malgré les erreurs
+    assert bias([10, 20], [12, 18]) == pytest.approx(0.0)
+    # sous-estimation systématique : (8-10) + (16-20) = -6 ; sum(y) = 30
+    assert bias([10, 20], [8, 16]) == pytest.approx(-6 / 30)
+    # surestimation systématique
+    assert bias([10, 20], [12, 24]) == pytest.approx(6 / 30)
+
+
+def test_bias_zero_demand():
+    assert bias([0, 0], [0, 0]) == 0.0
+    assert math.isinf(bias([0, 0], [1, 2]))
+
+
 def test_shape_mismatch_raises():
     with pytest.raises(ValueError):
         wape([1, 2], [1])
@@ -48,5 +62,6 @@ def test_empty_raises():
 
 def test_evaluate_keys_and_prefix():
     res = evaluate([1, 2], [1.1, 2.1], prefix="valid_")
-    assert set(res) == {"valid_wape", "valid_mape", "valid_rmse"}
+    assert set(res) == {"valid_wape", "valid_mape", "valid_rmse", "valid_bias"}
     assert res["valid_wape"] == pytest.approx(0.2 / 3)
+    assert res["valid_bias"] == pytest.approx(0.2 / 3)
