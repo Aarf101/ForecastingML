@@ -87,6 +87,14 @@ docs/diagrams/         # architecture.py + .png + .svg
 docs/architecture.md   # diagramme documenté, décisions, coûts, plan B
 ```
 
+## Compte AWS (Learner Lab)
+
+Le projet tourne **entièrement en local** (Redpanda + s3mock). Pour les Phases 4 à 6
+(SageMaker), il faut le compte fourni par l'école : voir
+**[docs/learner_lab.md](docs/learner_lab.md)** — enrôlement, démarrage de session,
+récupération des identifiants dans le profil `lab`, bascule du `.env`, limites du lab
+et réflexes qui protègent le crédit.
+
 ## Exposé « idée projet » (5 slides)
 
 - **`docs/slides.pptx`** — prêt à présenter (16:9), généré par `make slides`

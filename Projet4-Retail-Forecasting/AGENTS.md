@@ -33,7 +33,8 @@ src/retail_forecast/
   ingest/producer.py   rejoue le parquet → Kafka (--limit, --rate, --loop)
   ingest/to_s3.py      consumer micro-lots → S3, commit Kafka APRÈS écriture
   agent/, inference/   vides (Phase 5 / Phase 4)
-docs/  architecture.md (doc de référence), script.md (script oral), slides.md, diagrams/
+docs/  architecture.md (doc de référence), learner_lab.md (accès au compte AWS),
+       script.md (script oral), slides.md, diagrams/
 tests/ test_metrics, test_features, test_ingest, test_simulate
 ```
 
