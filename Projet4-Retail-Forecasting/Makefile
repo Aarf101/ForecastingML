@@ -1,5 +1,6 @@
 .PHONY: help setup env up down ps logs data test train train-quick diagram \
-        produce consume e2e slides lettre dashboard clean aws-setup
+        produce consume e2e slides lettre dashboard clean aws-setup etl \
+        sagemaker-train
 
 PY  := .venv/bin/python
 PIP := .venv/bin/pip
@@ -9,6 +10,8 @@ help:
 	@echo "make env          copie .env.example -> .env (S3 local par défaut)"
 	@echo "make up / down    Redpanda + console + S3 local (docker compose)"
 	@echo "make aws-setup    première mise en route AWS : bucket S3 + upload (profil lab)"
+	@echo "make etl          raw/ -> curated/ Parquet (miroir local du job Glue)"
+	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
 	@echo "make data         876k lignes synthétiques -> data/raw/sales.parquet"
 	@echo "make test         pytest"
 	@echo "make train        LightGBM local complet vs baseline saisonnière"
@@ -82,6 +85,12 @@ dashboard:
 
 aws-setup:
 	@bash scripts/aws_setup.sh $(SUFFIX)
+
+etl:
+	$(PY) -m retail_forecast.etl.build_curated
+
+sagemaker-train:
+	$(PY) -m infra.sagemaker.launch --wait
 
 clean:
 	rm -rf .pytest_cache reports/*.json

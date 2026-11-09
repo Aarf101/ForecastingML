@@ -8,12 +8,14 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (42 tests, ~1 s, aucun service externe requis) |
+| `make test` | pytest (48 tests, ~1 s, aucun service externe requis) |
 | `make train` | entraînement complet LightGBM → `reports/local_baseline.json`, `data/forecast/` |
 | `make train-quick` | même chose sur 15 % des lignes (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |
 | `make produce` / `make consume` | Phase 3 : ventes → topic `sales.events`, puis topic → `raw/` S3 |
 | `make e2e` | enchaîne tout et échoue si aucun objet n'arrive dans S3 |
+| `make etl` | `raw/` -> `curated/` Parquet (miroir local du job Glue) |
+| `make sagemaker-train` | Training Job LightGBM sur AWS (`infra/sagemaker/launch.py --wait`) |
 | `make diagram` | régénère les 5 variantes de diagrammes (matplotlib uniquement) |
 | `make slides` | régénère `docs/slides.pptx` depuis `docs/build_slides.py` |
 | `make lettre` | régénère `docs/lettre_motivation.pdf` (pdflatex, nécessite texlive) |
@@ -32,7 +34,12 @@ src/retail_forecast/
   ingest/storage.py    unique porte boto3 : raw_key(), gzip JSONL, chunking
   ingest/producer.py   rejoue le parquet → Kafka (--limit, --rate, --loop)
   ingest/to_s3.py      consumer micro-lots → S3, commit Kafka APRÈS écriture
+  etl/build_curated.py raw/ → curated/ (dédup, typage, Parquet)
   agent/, inference/   vides (Phase 5 / Phase 4)
+infra/sagemaker/
+  train_entry.py       script exécuté DANS le conteneur (features + LightGBM)
+  launch.py            boto3 create_training_job + packaging sourcedir.tar.gz
+  register.py          Model Registry (gate WAPE_THRESHOLD -> Approved)
 docs/  architecture.md (doc de référence), learner_lab.md (accès au compte AWS),
        script.md (script oral), slides.md, diagrams/
 tests/ test_metrics, test_features, test_ingest, test_simulate
@@ -55,8 +62,14 @@ tests/ test_metrics, test_features, test_ingest, test_simulate
 - ✅ Phase 0 squelette · ✅ Phase 1 données · ✅ Phase 2 features + modèle
   (WAPE **0.430** vs baseline **0.568**, soit −24,3 %)
 - ✅ Phase 3 ingestion Kafka → micro-lots gzip → S3 (validée de bout en bout)
-- ⏳ Phase 3b ETL `raw/` → `curated/` Parquet + dédup · ⏳ Phase 4 SageMaker
-  · ⏳ Phase 5 agent · ⏳ Phase 6 dashboard Streamlit
+- ✅ Phase 3b ETL `raw/` → `curated/` Parquet (dédup + typage)
+- ✅ Phase 4a Training Job SageMaker (`ml.m5.large`, 2,7 min, ~0,005 €) :
+  WAPE **0.4298** vs baseline 0.5683 côté cloud — identique au local (0.4291)
+- ✅ Phase 4b Model Registry : v1 `PendingManualApproval`, v2 `Approved`
+  (`WAPE_THRESHOLD=0.45` ; la v1 montre le fonctionnement du gate)
+- ⏳ Phase 4c Batch Transform → `forecast/` (il manque encore un `inference.py`
+  dans `model.tar.gz`) · ⏳ Athena · ⏳ Phase 5 rapport LLM (Ollama qwen2.5:3b)
+  · ⏳ Phase 6 dashboard Streamlit
 
 ## Décisions déjà arbitrées (ne pas les reproposer)
 
