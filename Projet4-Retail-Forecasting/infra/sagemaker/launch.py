@@ -33,7 +33,7 @@ IMAGE = (
 PROGRAM = "train_entry.py"
 SOURCEDIR_KEY = "code/sourcedir.tar.gz"
 INSTANCE = "ml.m5.large"  # 2 vCPU / 8 Go — le moins cher qui suffit
-MAX_RUNTIME = 900  # 15 min : garde-fou anti-dépense
+MAX_RUNTIME = 1200  # 20 min : garde-fou anti-dépense
 
 
 def _sm_client():
@@ -51,6 +51,7 @@ def build_tarball() -> bytes:
     """Empaquette le paquet retail_forecast + le script d'entrée + requirements."""
     src = ROOT / "src" / "retail_forecast"
     entry = Path(__file__).with_name("train_entry.py")
+    handler = Path(__file__).with_name("inference.py")
     reqs = Path(__file__).with_name("requirements.txt")
 
     buf = io.BytesIO()
@@ -60,6 +61,7 @@ def build_tarball() -> bytes:
                 continue
             tar.add(path, arcname=str(Path("retail_forecast") / path.relative_to(src)))
         tar.add(entry, arcname=PROGRAM)
+        tar.add(handler, arcname="inference.py")
         tar.add(reqs, arcname="requirements.txt")
     return buf.getvalue()
 
@@ -110,7 +112,7 @@ def job_request(bucket: str, job_name: str, code_uri: str, args) -> dict:
             "sagemaker_submit_directory": code_uri,
             "sagemaker_container_log_level": "20",
             "sagemaker_region": SETTINGS.region,
-            "horizon": str(args.horizon),
+            "horizons": args.horizons,
             "n-estimators": str(args.estimators),
             "early-stopping-rounds": str(args.early_stopping),
         },
@@ -132,8 +134,8 @@ def read_metrics(client, bucket: str, job_name: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Training Job SageMaker (LightGBM).")
-    parser.add_argument("--horizon", type=int, default=1)
-    parser.add_argument("--estimators", type=int, default=400)
+    parser.add_argument("--horizons", default="1,7,14,28", help="ex. 1,7,14,28")
+    parser.add_argument("--estimators", type=int, default=300)
     parser.add_argument("--early-stopping", type=int, default=40)
     parser.add_argument("--wait", action="store_true", help="attendre la fin du job")
     parser.add_argument("--dry-run", action="store_true", help="ne rien envoyer à AWS")

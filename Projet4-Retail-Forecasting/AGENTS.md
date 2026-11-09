@@ -18,6 +18,11 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 | `make sagemaker-train` | Training Job LightGBM sur AWS (`infra/sagemaker/launch.py --wait`) |
 | `make diagram` | régénère les 5 variantes de diagrammes (matplotlib uniquement) |
 | `make slides` | régénère `docs/slides.pptx` depuis `docs/build_slides.py` |
+| `make sagemaker-register` | Model Registry (gate `WAPE_THRESHOLD`) |
+| `make sagemaker-transform` | Batch Transform → `forecast/` |
+| `make athena` | tables externes + 2 KPI SQL |
+| `make dashboard` | Streamlit :8501 |
+| `make brief` | rapport hebdo Ollama → `reports/` + S3 |
 | `make lettre` | régénère `docs/lettre_motivation.pdf` (pdflatex, nécessite texlive) |
 
 Toujours utiliser `.venv/bin/python` (`python3` système n'a ni lightgbm ni kafka-python).
@@ -67,9 +72,13 @@ tests/ test_metrics, test_features, test_ingest, test_simulate
   WAPE **0.4298** vs baseline 0.5683 côté cloud — identique au local (0.4291)
 - ✅ Phase 4b Model Registry : v1 `PendingManualApproval`, v2 `Approved`
   (`WAPE_THRESHOLD=0.45` ; la v1 montre le fonctionnement du gate)
-- ⏳ Phase 4c Batch Transform → `forecast/` (il manque encore un `inference.py`
-  dans `model.tar.gz`) · ⏳ Athena · ⏳ Phase 5 rapport LLM (Ollama qwen2.5:3b)
-  · ⏳ Phase 6 dashboard Streamlit
+- ✅ Phase 4c Batch Transform → `forecast/table/forecast.parquet` (4 800 lignes,
+  4 horizons) · `inference.py` + `SAGEMAKER_REQUIREMENTS` dans l'artefact
+- ✅ Athena : base `retail_forecast`, tables `curated_sales` / `forecast`, 2 KPI
+- ✅ Phase 6 dashboard Streamlit (`make dashboard`, S3 ou local)
+- ✅ Phase 5 rapport LLM : `retail_forecast.agent.brief` (Ollama qwen2.5:3b)
+- ✅ `docs/report.md` : les 4 points du rendu PDF
+- ⏳ Reste : vidéo 2 min, répétition orale, quantiles P10/P90
 
 ## Décisions déjà arbitrées (ne pas les reproposer)
 

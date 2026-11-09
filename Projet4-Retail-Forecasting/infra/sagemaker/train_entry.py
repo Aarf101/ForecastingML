@@ -1,9 +1,13 @@
 """Point d'entrée du Training Job SageMaker (conteneur SKLearn managé).
 
-Ce script tourne **dans le conteneur** SageMaker, pas en local. Il reprend
-exactement le même pipeline que ``retail_forecast.train.train_lgbm`` — mêmes
-features, mêmes métriques — pour que les chiffres du local et ceux du cloud
-soient comparables.
+Ce script tourne **dans le conteneur** SageMaker, pas en local. Il reprend le
+même pipeline que ``retail_forecast.train.train_lgbm`` — mêmes features, mêmes
+métriques — pour que les chiffres du local et ceux du cloud soient comparables.
+
+Un modèle **par horizon** est entraîné (stratégie directe multi-horizon : un
+booster par h évite d'empiler les erreurs comme le ferait une prévision
+récursive). Les features sont calculées une seule fois, seules les cibles
+changent — c'est ce qui permet de tenir 4 horizons en quelques minutes.
 
 Convention de montage SageMaker :
 
@@ -13,13 +17,14 @@ Convention de montage SageMaker :
 
 Usage (appelé par SageMaker, pas à la main) ::
 
-    python train_entry.py --horizon 1 --n-estimators 600
+    python train_entry.py --horizons 1,7,14,28 --n-estimators 300
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -33,6 +38,8 @@ import pandas as pd  # noqa: E402
 
 from retail_forecast.evaluate.metrics import bias, rmse, wape  # noqa: E402
 from retail_forecast.features.build import (  # noqa: E402
+    TARGET,
+    add_target,
     build_features,
     time_split,
     xy,
@@ -47,7 +54,7 @@ import lightgbm as lgb  # noqa: E402
 
 
 def _read_channel(name: str) -> pd.DataFrame:
-    """Lit tous les Parquet du canal ``name`` (ou son unique fichier)."""
+    """Lit tous les Parquet du canal ``name`` (ou ses CSV)."""
     root = BASE / "input" / "data" / name
     files = sorted(root.rglob("*.parquet")) or sorted(root.rglob("*.csv"))
     if not files:
@@ -61,9 +68,16 @@ def _read_channel(name: str) -> pd.DataFrame:
     return df
 
 
+def _dataset_for_horizon(base: pd.DataFrame, horizon: int) -> pd.DataFrame:
+    """Recolle la cible ``t + horizon`` sur des features calculées une seule fois."""
+    df = add_target(base.drop(columns=[TARGET]), horizon=horizon)
+    feat_cols = [c for c in df.columns if c.startswith(("lag_", "roll_"))]
+    return df.dropna(subset=[*feat_cols, TARGET]).reset_index(drop=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Training Job LightGBM (SageMaker).")
-    ap.add_argument("--horizon", type=int, default=1)
+    ap.add_argument("--horizons", default="1")
     ap.add_argument("--n-estimators", type=int, default=DEFAULT_PARAMS["n_estimators"])
     ap.add_argument("--learning-rate", type=float, default=DEFAULT_PARAMS["learning_rate"])
     ap.add_argument("--num-leaves", type=int, default=DEFAULT_PARAMS["num_leaves"])
@@ -71,19 +85,12 @@ def main() -> int:
     ap.add_argument("--valid-days", type=int, default=56)
     ap.add_argument("--test-days", type=int, default=28)
     args = ap.parse_args()
+    horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
 
     sales = _read_channel("training")
-    feats = build_features(sales, horizon=args.horizon)
-    train, valid, test = time_split(
-        feats, valid_days=args.valid_days, test_days=args.test_days
-    )
-    X_tr, y_tr = xy(train)
-    X_va, y_va = xy(valid)
-    X_te, y_te = xy(test)
-    print(
-        f"[entry] horizon={args.horizon}j  train={len(train):,}"
-        f"  valid={len(valid):,}  test={len(test):,}  features={X_tr.shape[1]}"
-    )
+    # Une seule passe de features (le rolling coûte cher) ; la cible est recollée.
+    base = build_features(sales, horizon=1, dropna=False)
+    print(f"[entry] features calculées : {len(base):,} lignes, horizons {horizons}")
 
     params = {
         **DEFAULT_PARAMS,
@@ -91,63 +98,87 @@ def main() -> int:
         "learning_rate": args.learning_rate,
         "num_leaves": args.num_leaves,
     }
-    model = _fit(
-        lgb.LGBMRegressor(**params),
-        X_tr,
-        y_tr,
-        X_va,
-        y_va,
-        args.early_stopping_rounds,
-    )
 
-    pred = np.clip(model.predict(X_te), 0, None)
-    base = np.clip(seasonal_naive(test), 0, None)
-    metrics = {
-        "horizon": args.horizon,
-        "n_train": int(len(train)),
-        "n_valid": int(len(valid)),
-        "n_test": int(len(test)),
-        "n_features": int(X_tr.shape[1]),
-        "best_iteration": int(model.best_iteration_ or args.n_estimators),
-        "test_wape": wape(y_te, pred),
-        "test_rmse": rmse(y_te, pred),
-        "test_bias": bias(y_te, pred),
-        "baseline_wape": wape(y_te, base),
-        "baseline_rmse": rmse(y_te, base),
-        "baseline_bias": bias(y_te, base),
-    }
-    metrics["improvement_vs_baseline"] = (
-        metrics["baseline_wape"] - metrics["test_wape"]
-    ) / metrics["baseline_wape"]
-
-    # 1. modèle + métadonnées dans /opt/ml/model (-> model.tar.gz sur S3)
     model_dir = BASE / "model"
     model_dir.mkdir(parents=True, exist_ok=True)
-    model.booster_.save_model(str(model_dir / "model.txt"))
+    by_horizon: dict[str, dict] = {}
+    features: list[str] = []
+
+    for horizon in horizons:
+        data = _dataset_for_horizon(base, horizon)
+        train, valid, test = time_split(
+            data, valid_days=args.valid_days, test_days=args.test_days
+        )
+        X_tr, y_tr = xy(train)
+        X_va, y_va = xy(valid)
+        X_te, y_te = xy(test)
+        features = list(X_tr.columns)
+
+        model = _fit(
+            lgb.LGBMRegressor(**params), X_tr, y_tr, X_va, y_va, args.early_stopping_rounds
+        )
+        pred = np.clip(model.predict(X_te), 0, None)
+        base_pred = np.clip(seasonal_naive(test), 0, None)
+        base_wape = wape(y_te, base_pred)
+
+        metrics = {
+            "horizon": horizon,
+            "n_train": int(len(train)),
+            "n_test": int(len(test)),
+            "n_features": len(features),
+            "best_iteration": int(model.best_iteration_ or args.n_estimators),
+            "test_wape": wape(y_te, pred),
+            "test_rmse": rmse(y_te, pred),
+            "test_bias": bias(y_te, pred),
+            "baseline_wape": base_wape,
+            "improvement_vs_baseline": (base_wape - wape(y_te, pred)) / base_wape,
+        }
+        by_horizon[str(horizon)] = metrics
+        model.booster_.save_model(str(model_dir / f"model_{horizon}.txt"))
+        print(
+            f"[entry] h={horizon:>2}j  WAPE {metrics['test_wape']:.4f}"
+            f" (baseline {base_wape:.4f}, gain {metrics['improvement_vs_baseline']:+.1%})"
+        )
+
+    # Le handler d'inférence doit voyager DANS l'artefact (Batch Transform).
+    handler = CODE_DIR / "inference.py"
+    if handler.exists():
+        shutil.copy(handler, model_dir / "inference.py")
+    # Dépendances d'inférence : le conteneur les installe au démarrage via
+    # SAGEMAKER_REQUIREMENTS (LightGBM n'est pas dans l'image SKLearn).
+    reqs = CODE_DIR / "requirements.txt"
+    if reqs.exists():
+        shutil.copy(reqs, model_dir / "requirements.txt")
+
     (model_dir / "metadata.json").write_text(
         json.dumps(
             {
                 "framework": "lightgbm",
-                "horizon": args.horizon,
-                "features": list(X_tr.columns),
+                "horizons": horizons,
+                "features": features,
                 "params": {k: v for k, v in params.items() if k != "n_jobs"},
-                "metrics": metrics,
+                "metrics": by_horizon,
             },
             indent=2,
             default=float,
         )
     )
-    (model_dir / "metrics.json").write_text(json.dumps(metrics, indent=2, default=float))
 
-    # 2. copie dans /opt/ml/output/data (-> output.tar.gz, lisible dans les logs)
+    # Résumé à plat (horizon principal = le premier) pour le Model Registry.
+    summary = {
+        "horizons": horizons,
+        "by_horizon": by_horizon,
+        **by_horizon[str(horizons[0])],
+    }
+    (model_dir / "metrics.json").write_text(json.dumps(summary, indent=2, default=float))
     out_dir = BASE / "output" / "data"
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2, default=float))
+    (out_dir / "metrics.json").write_text(json.dumps(summary, indent=2, default=float))
 
-    print("[entry] metriques " + json.dumps(metrics, default=float))
-    print(f"[entry] WAPE {metrics['test_wape']:.4f} "
-          f"(baseline {metrics['baseline_wape']:.4f}, "
-          f"gain {metrics['improvement_vs_baseline']:+.1%})")
+    print(
+        "[entry] resume "
+        + json.dumps({h: round(m["test_wape"], 4) for h, m in by_horizon.items()})
+    )
     return 0
 
 

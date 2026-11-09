@@ -12,6 +12,11 @@ help:
 	@echo "make aws-setup    première mise en route AWS : bucket S3 + upload (profil lab)"
 	@echo "make etl          raw/ -> curated/ Parquet (miroir local du job Glue)"
 	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
+	@echo "make sagemaker-register  enregistre le modele (gate WAPE)"
+	@echo "make sagemaker-transform Batch Transform -> forecast/"
+	@echo "make athena       tables externes + KPI SQL"
+	@echo "make dashboard    Streamlit :8501 (prevu vs realise)"
+	@echo "make brief        rapport hebdo redige par Ollama"
 	@echo "make data         876k lignes synthétiques -> data/raw/sales.parquet"
 	@echo "make test         pytest"
 	@echo "make train        LightGBM local complet vs baseline saisonnière"
@@ -79,9 +84,20 @@ lettre:
 	@rm -f docs/lettre_motivation.aux docs/lettre_motivation.log docs/lettre_motivation.out
 	@echo "docs/lettre_motivation.pdf régénéré"
 
+sagemaker-register:
+	$(PY) -m infra.sagemaker.register
+
+sagemaker-transform:
+	$(PY) -m infra.sagemaker.batch_transform
+
+athena:
+	$(PY) -m infra.athena.setup
+
+brief:
+	$(PY) -m retail_forecast.agent.brief
+
 dashboard:
-	@echo "Phase 6 — pas encore implémenté"
-	@exit 1
+	$(PY) -m streamlit run dashboards/streamlit/app.py --server.port 8501
 
 aws-setup:
 	@bash scripts/aws_setup.sh $(SUFFIX)
