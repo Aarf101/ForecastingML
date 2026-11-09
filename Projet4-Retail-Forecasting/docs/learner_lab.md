@@ -68,6 +68,16 @@ Le numéro de compte apparaît dans la réponse ci-dessus.
 
 ## 5. Basculer le projet de local vers AWS
 
+Une fois les identifiants collés, un seul script fait le reste :
+
+```bash
+make aws-setup            # ou : bash scripts/aws_setup.sh <binome>
+```
+
+Il vérifie le profil `lab`, affiche le numéro de compte, crée
+`s3://retail-forecast-<compte>-<binome>`, y dépose `data/raw/sales.parquet`
+sous `raw/historique/`, et imprime le bloc `.env` à coller.
+
 `.env` est configuré pour le local (s3mock). Pour passer sur AWS, **vider** les
 quatre lignes suivantes — sinon boto3 envoie les faux identifiants `test` à AWS :
 

@@ -1,5 +1,5 @@
 .PHONY: help setup env up down ps logs data test train train-quick diagram \
-        produce consume e2e slides lettre dashboard clean
+        produce consume e2e slides lettre dashboard clean aws-setup
 
 PY  := .venv/bin/python
 PIP := .venv/bin/pip
@@ -8,6 +8,7 @@ help:
 	@echo "make setup        venv (.venv) + dépendances"
 	@echo "make env          copie .env.example -> .env (S3 local par défaut)"
 	@echo "make up / down    Redpanda + console + S3 local (docker compose)"
+	@echo "make aws-setup    première mise en route AWS : bucket S3 + upload (profil lab)"
 	@echo "make data         876k lignes synthétiques -> data/raw/sales.parquet"
 	@echo "make test         pytest"
 	@echo "make train        LightGBM local complet vs baseline saisonnière"
@@ -78,6 +79,9 @@ lettre:
 dashboard:
 	@echo "Phase 6 — pas encore implémenté"
 	@exit 1
+
+aws-setup:
+	@bash scripts/aws_setup.sh $(SUFFIX)
 
 clean:
 	rm -rf .pytest_cache reports/*.json
