@@ -13,6 +13,8 @@ help:
 	@echo "make cfn-import   adopte le bucket + registre + catalogue dans CloudFormation"
 	@echo "make cfn-deploy   cree la stack de zero (bucket neuf)"
 	@echo "make cfn-drift    detecte les ecarts template <-> ressources"
+	@echo "make aws-teardown arret de l'endpoint et du notebook (dry-run)"
+	@echo "make aws-teardown-go  idem, en supprimant vraiment"
 	@echo "make etl          raw/ -> curated/ Parquet (miroir local du job Glue)"
 	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
 	@echo "make sagemaker-register  enregistre le modele (gate WAPE)"
@@ -113,6 +115,12 @@ cfn-deploy:
 
 cfn-drift:
 	@bash scripts/cfn.sh drift
+
+aws-teardown:
+	@bash scripts/aws_teardown.sh --dry-run
+
+aws-teardown-go:
+	@bash scripts/aws_teardown.sh --yes
 
 etl:
 	$(PY) -m retail_forecast.etl.build_curated
