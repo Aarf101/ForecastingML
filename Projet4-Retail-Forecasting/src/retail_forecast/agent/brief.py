@@ -25,7 +25,8 @@ import pandas as pd
 
 from retail_forecast.config import ROOT, SETTINGS
 
-PROMPT = """Données de la semaine : {totaux}. Magasins les plus forts : {magasins}. """     """Séries les plus volatiles : {volatiles}. Modèle : WAPE {wape:.1%} contre {baseline:.1%} """     """pour la baseline saisonnière, soit {gain:.0%} de mieux, biais {biais:+.1%}. """     """Rédige un paragraphe unique de trois phrases en français qui commente ces chiffres, """     """puis deux actions concrètes pour le responsable des achats. Pas de listes, pas de titres, """     """pas de recopie des données. N'invente aucun chiffre."""
+PROMPT = """Données de la semaine : {totaux}. Magasins les plus forts : {magasins}. """     """Séries les plus volatiles : {volatiles}. Modèle : WAPE {wape:.1%} contre {baseline:.1%} """     """pour la baseline saisonnière, soit {gain:.0%} de mieux, biais {biais:+.1%}. """     """Rédige un paragraphe unique de trois phrases en français qui commente ces chiffres, """     """puis deux actions concrètes pour le responsable des achats. Pas de listes, pas de titres, """     """pas de recopie des données. N'invente aucun chiffre. """ \
+    """Réponds en un seul paragraphe suivi, en français, sans puces ni titres. """
 
 
 def _ollama(prompt: str, model: str, base_url: str, timeout: int = 180) -> str:
@@ -62,7 +63,7 @@ def _sagemaker(prompt: str, endpoint: str) -> str:
     payload = {
         "inputs": chat,
         "parameters": {
-            "max_new_tokens": 200,
+            "max_new_tokens": 150,
             "do_sample": False,
             "return_full_text": False,
         },

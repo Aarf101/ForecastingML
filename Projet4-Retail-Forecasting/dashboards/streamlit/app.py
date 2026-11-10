@@ -13,13 +13,31 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from retail_forecast.config import ROOT, SETTINGS
+# Le dashboard tourne dans deux contextes : en local (avec le paquet installé)
+# et sur une instance SageMaker, où seul ce fichier est déposé. D'où le repli
+# sur l'environnement : S3_BUCKET suffit, le rôle de l'instance fournit les droits.
+try:
+    from retail_forecast.config import ROOT, SETTINGS
+
+    BUCKET = SETTINGS.bucket
+except Exception:  # mode « fichier seul » (SageMaker, Colab, etc.)
+    ROOT = Path.cwd()
+    BUCKET = os.environ.get("S3_BUCKET", "retail-forecast-654654161593-ayoub")
+
+
+def _s3():
+    """Client S3 minimal : identifiants de l'environnement (rôle IAM)."""
+    import boto3
+
+    return boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+
 
 st.set_page_config(page_title="Retail ML Forecasting", page_icon="🛒", layout="wide")
 
@@ -28,14 +46,12 @@ st.set_page_config(page_title="Retail ML Forecasting", page_icon="🛒", layout=
 def load_forecast() -> tuple[pd.DataFrame, str]:
     """Prévisions : S3 d'abord, sinon data/forecast/."""
     local = ROOT / "data" / "forecast" / "forecast.parquet"
-    if SETTINGS.bucket:
-        from retail_forecast.ingest.storage import s3_client
-
+    if BUCKET:
         try:
-            body = s3_client().get_object(
-                Bucket=SETTINGS.bucket, Key="forecast/table/forecast.parquet"
+            body = _s3().get_object(
+                Bucket=BUCKET, Key="forecast/table/forecast.parquet"
             )["Body"].read()
-            return pd.read_parquet(io.BytesIO(body)), f"s3://{SETTINGS.bucket}"
+            return pd.read_parquet(io.BytesIO(body)), f"s3://{BUCKET}"
         except Exception:  # pas encore de prévision sur S3
             pass
     if local.exists():
@@ -47,19 +63,24 @@ def load_forecast() -> tuple[pd.DataFrame, str]:
 @st.cache_data(ttl=300, show_spinner=False)
 def load_history() -> pd.DataFrame:
     """Historique des ventes : S3 (curated) sinon data/raw/."""
-    if SETTINGS.bucket:
-        from retail_forecast.ingest.storage import s3_client
-
+    if BUCKET:
         try:
-            body = s3_client().get_object(
-                Bucket=SETTINGS.bucket, Key="curated/sales/sales.parquet"
+            body = _s3().get_object(
+                Bucket=BUCKET, Key="curated/sales/sales.parquet"
             )["Body"].read()
             df = pd.read_parquet(io.BytesIO(body))
             df["date"] = pd.to_datetime(df["date"])
             return df
         except Exception:
             pass
-    df = pd.read_parquet(ROOT / "data" / "raw" / "sales.parquet")
+    local_raw = ROOT / "data" / "raw" / "sales.parquet"
+    if not local_raw.exists():
+        st.error(
+            "Historique introuvable : ni `curated/sales/` dans S3, ni "
+            "`data/raw/sales.parquet` en local."
+        )
+        st.stop()
+    df = pd.read_parquet(local_raw)
     df["date"] = pd.to_datetime(df["date"])
     return df
 
@@ -67,9 +88,19 @@ def load_history() -> pd.DataFrame:
 @st.cache_data(ttl=300, show_spinner=False)
 def load_metrics() -> dict:
     """Métriques du dernier entraînement (copie locale du rapport)."""
-    cloud = ROOT / "reports" / "cloud_metrics.json"
-    path = cloud if cloud.exists() else ROOT / "reports" / "local_baseline.json"
-    return json.loads(path.read_text()) if path.exists() else {}
+    if BUCKET:
+        try:
+            body = _s3().get_object(
+                Bucket=BUCKET, Key="reports/cloud_metrics.json"
+            )["Body"].read()
+            return json.loads(body)
+        except Exception:
+            pass
+    for name in ("cloud_metrics.json", "local_baseline.json"):
+        path = ROOT / "reports" / name
+        if path.exists():
+            return json.loads(path.read_text())
+    return {}  # sur SageMaker les métriques ne sont pas déposées avec l'app
 
 
 forecast, source = load_forecast()
