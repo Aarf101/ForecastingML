@@ -29,11 +29,25 @@ def s3_client(settings: Settings = SETTINGS):
 
 
 def ensure_bucket(client, bucket: str) -> None:
-    """Crée le bucket s'il n'existe pas (S3 local local)."""
+    """Crée le bucket s'il n'existe pas — et seulement dans ce cas.
+
+    Un ``except Exception`` attrapait aussi les erreurs de credentials : un
+    jeton expiré se traduisait par une tentative de création de bucket, donc par
+    un message trompeur (``head_bucket`` renvoie 400, puis ``create_bucket``
+    échoue en ``ExpiredToken``). On ne crée donc que sur un vrai 404.
+    """
+    from botocore.exceptions import ClientError
+
     try:
         client.head_bucket(Bucket=bucket)
-    except Exception:  # botocore.exceptions.ClientError / NoCredentialsError
-        client.create_bucket(Bucket=bucket)
+        return
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if code in {"404", "NoSuchBucket", "NotFound"} or status == 404:
+            client.create_bucket(Bucket=bucket)
+            return
+        raise  # credentials, droits, région : on laisse remonter tel quel
 
 
 def raw_key(
