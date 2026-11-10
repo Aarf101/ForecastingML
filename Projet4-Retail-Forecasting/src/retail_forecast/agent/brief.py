@@ -25,16 +25,7 @@ import pandas as pd
 
 from retail_forecast.config import ROOT, SETTINGS
 
-PROMPT = """Tu es analyste supply chain. Rédige un brief de 120 mots maximum, en français, \
-à partir de ces chiffres. Trois phrases de constat, puis deux actions concrètes. \
-Pas de titres, pas de listes, pas d'invention de chiffres.
-
-Unités prévues pour la journée cible, par horizon : {totaux}
-Top 3 magasins : {magasins}
-Séries les plus volatiles : {volatiles}
-Performance du modèle : WAPE {wape:.1%} contre {baseline:.1%} pour la baseline \
-saisonnière, soit {gain:.0%} de mieux ; biais {biais:+.1%}.
-"""
+PROMPT = """Données de la semaine : {totaux}. Magasins les plus forts : {magasins}. """     """Séries les plus volatiles : {volatiles}. Modèle : WAPE {wape:.1%} contre {baseline:.1%} """     """pour la baseline saisonnière, soit {gain:.0%} de mieux, biais {biais:+.1%}. """     """Rédige un paragraphe unique de trois phrases en français qui commente ces chiffres, """     """puis deux actions concrètes pour le responsable des achats. Pas de listes, pas de titres, """     """pas de recopie des données. N'invente aucun chiffre."""
 
 
 def _ollama(prompt: str, model: str, base_url: str, timeout: int = 180) -> str:
@@ -47,6 +38,56 @@ def _ollama(prompt: str, model: str, base_url: str, timeout: int = 180) -> str:
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read())["response"].strip()
+
+
+def _sagemaker(prompt: str, endpoint: str) -> str:
+    """Appelle l'endpoint Hugging Face sur SageMaker (remplace Bedrock)."""
+    import boto3
+
+    kwargs: dict = {"region_name": SETTINGS.region}
+    if SETTINGS.s3_access_key:
+        kwargs["aws_access_key_id"] = SETTINGS.s3_access_key
+        kwargs["aws_secret_access_key"] = SETTINGS.s3_secret_key
+    client = boto3.client("sagemaker-runtime", **kwargs)
+    # Qwen2.5 est un modèle conversationnel : sans template ChatML il répond en
+    # anglais et divague. Le conteneur HF applique le template si on lui donne
+    # les messages, mais on le construit explicitement pour être déterministe.
+    chat = (
+        "<|im_start|>system\n"
+        "Tu es un analyste supply chain. Tu réponds uniquement en français, "
+        "en texte suivi, sans titres ni listes.<|im_end|>\n"
+        f"<|im_start|>user\n{prompt}<|im_end|>\n"
+        "<|im_start|>assistant\n"
+    )
+    payload = {
+        "inputs": chat,
+        "parameters": {
+            "max_new_tokens": 200,
+            "do_sample": False,
+            "return_full_text": False,
+        },
+    }
+    response = client.invoke_endpoint(
+        EndpointName=endpoint,
+        ContentType="application/json",
+        Body=json.dumps(payload).encode("utf-8"),
+    )
+    body = json.loads(response["Body"].read())
+    text = body[0]["generated_text"] if isinstance(body, list) else str(body)
+    return text.strip()
+
+
+def generate(prompt: str, provider: str) -> str:
+    """Choisit le backend LLM (``ollama`` en local, ``sagemaker`` sur AWS)."""
+    if provider == "ollama":
+        return _ollama(prompt, SETTINGS.ollama_model, SETTINGS.ollama_base_url)
+    if provider == "sagemaker":
+        return _sagemaker(prompt, SETTINGS.llm_endpoint)
+    if provider == "bedrock":
+        raise SystemExit(
+            "Bedrock n'est pas activé dans ce compte (pas de bedrock:* dans les  politiques). Utiliser --provider sagemaker."
+        )
+    raise SystemExit(f"provider inconnu : {provider}")
 
 
 def _load_forecast() -> pd.DataFrame:
@@ -112,12 +153,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default=SETTINGS.ollama_model)
     parser.add_argument("--base-url", default=SETTINGS.ollama_base_url)
     parser.add_argument("--no-s3", action="store_true")
+    parser.add_argument(
+        "--provider", default=SETTINGS.llm_provider, choices=["ollama", "sagemaker", "bedrock"]
+    )
     args = parser.parse_args(argv)
 
     forecast = _load_forecast()
     prompt = build_prompt(forecast)
-    print(f"[brief] modèle {args.model} · {len(forecast):,} prévisions agrégées")
-    text = _ollama(prompt, args.model, args.base_url)
+    print(f"[brief] provider {args.provider} · {len(forecast):,} prévisions agrégées")
+    text = generate(prompt, args.provider)
 
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     content = f"# Brief ventes — {day}\n\n{text}\n"

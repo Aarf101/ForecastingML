@@ -99,9 +99,20 @@ def run_query(client, sql: str, label: str, wait: bool = True) -> list[tuple]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Athena : tables + KPI sur S3.")
     parser.add_argument("--kpi-only", action="store_true")
+    parser.add_argument(
+        "--drop",
+        action="store_true",
+        help="supprime les tables (métadonnées seules) avant un import CloudFormation",
+    )
     args = parser.parse_args(argv)
 
     client = _athena()
+    if args.drop:
+        for table in ("forecast", "curated_sales"):
+            run_query(client, f"DROP TABLE IF EXISTS {DATABASE}.{table}", f"drop {table}")
+        print("[athena] tables supprimées — les fichiers Parquet dans S3 sont intacts")
+        return 0
+
     if not args.kpi_only:
         for sql in DDL:
             label = sql.split("(")[0].split()[:5]

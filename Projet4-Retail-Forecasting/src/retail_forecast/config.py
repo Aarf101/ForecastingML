@@ -59,6 +59,7 @@ class Settings:
     model_name: str
     wape_threshold: float
     llm_provider: str
+    llm_endpoint: str
     ollama_model: str
     ollama_base_url: str
     bedrock_model_id: str
@@ -82,6 +83,7 @@ class Settings:
             model_name=e.get("MODEL_NAME", "lgbm-global"),
             wape_threshold=float(e.get("WAPE_THRESHOLD", "0.30")),
             llm_provider=e.get("LLM_PROVIDER", "ollama").lower(),
+            llm_endpoint=e.get("LLM_ENDPOINT", "retail-llm-hf"),
             ollama_model=e.get("OLLAMA_MODEL", "llama3.1:8b"),
             ollama_base_url=e.get("OLLAMA_BASE_URL", "http://localhost:11434"),
             bedrock_model_id=e.get(

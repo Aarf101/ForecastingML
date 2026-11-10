@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Retail ML Forecasting (Projet 4) — infrastructure déclarative : lac de données
+  S3, catalogue Glue/Athena et groupe du Model Registry. Les Training Jobs et
+  Batch Transform ne sont pas des ressources CloudFormation : ils restent pilotés
+  par les scripts boto3 (infra/sagemaker/*), ce qui est le schéma normal
+  (Step Functions / Pipelines orchestrent des appels d'API, pas l'inverse).
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Nom du bucket du lac de données (unique au monde).
+  ModelPackageGroupName:
+    Type: String
+    Default: retail-forecast-lgbm
+  DatabaseName:
+    Type: String
+    Default: retail_forecast
+  EnableVersioning:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Laisser false pour adopter un bucket existant créé sans versionnement
+      (sinon l'import CloudFormation signale une dérive).
+
+Conditions:
+  VersioningOn: !Equals [!Ref EnableVersioning, "true"]
+
+Resources:
+  DataLakeBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: !If [VersioningOn, Enabled, Suspended]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: project
+          Value: retail-forecast
+        - Key: phase
+          Value: data-lake
+
+  ModelRegistryGroup:
+    Type: AWS::SageMaker::ModelPackageGroup
+    Properties:
+      ModelPackageGroupName: !Ref ModelPackageGroupName
+      ModelPackageGroupDescription: Prévision de la demande J+1..J+28 (LightGBM global).
+      Tags:
+        - Key: project
+          Value: retail-forecast
+
+  CatalogDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Ref DatabaseName
+        Description: Tables externes Athena (curated + forecast).
+
+  CuratedSalesTable:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref DatabaseName
+      TableInput:
+        Name: curated_sales
+        Description: Ventes nettoyées (Parquet), source du Training Job.
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          has_encrypted_data: "false"
+        StorageDescriptor:
+          Location: !Sub "s3://${BucketName}/curated/sales/"
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          Compressed: false
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+          Columns:
+            - {Name: date, Type: timestamp}
+            - {Name: store_id, Type: string}
+            - {Name: item_id, Type: string}
+            - {Name: category, Type: string}
+            - {Name: unit_price, Type: float}
+            - {Name: promo, Type: int}
+            - {Name: is_holiday, Type: int}
+            - {Name: lead_time_days, Type: int}
+            - {Name: units, Type: int}
+            - {Name: stock_on_hand, Type: int}
+            - {Name: stockout, Type: int}
+
+  ForecastTable:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref DatabaseName
+      TableInput:
+        Name: forecast
+        Description: Prévisions produites par le Batch Transform.
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          has_encrypted_data: "false"
+        StorageDescriptor:
+          Location: !Sub "s3://${BucketName}/forecast/table/"
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          Compressed: false
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+          Columns:
+            - {Name: store_id, Type: string}
+            - {Name: item_id, Type: string}
+            - {Name: origin_date, Type: timestamp}
+            - {Name: target_date, Type: timestamp}
+            - {Name: horizon, Type: int}
+            - {Name: forecast_units, Type: double}
+            - {Name: model_version, Type: string}
+            - {Name: model_job, Type: string}
+            - {Name: run_date, Type: string}
+
+Outputs:
+  BucketName:
+    Value: !Ref DataLakeBucket
+    Description: Lac de données (raw/, curated/, models/, forecast/).
+  BucketArn:
+    Value: !GetAtt DataLakeBucket.Arn
+  ModelPackageGroupArn:
+    Value: !Ref ModelRegistryGroup
+  DatabaseName:
+    Value: !Ref CatalogDatabase
+  CuratedTable:
+    Value: !Sub "${DatabaseName}.curated_sales"
+  ForecastTable:
+    Value: !Sub "${DatabaseName}.forecast"

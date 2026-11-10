@@ -10,6 +10,9 @@ help:
 	@echo "make env          copie .env.example -> .env (S3 local par défaut)"
 	@echo "make up / down    Redpanda + console + S3 local (docker compose)"
 	@echo "make aws-setup    première mise en route AWS : bucket S3 + upload (profil lab)"
+	@echo "make cfn-import   adopte le bucket + registre + catalogue dans CloudFormation"
+	@echo "make cfn-deploy   cree la stack de zero (bucket neuf)"
+	@echo "make cfn-drift    detecte les ecarts template <-> ressources"
 	@echo "make etl          raw/ -> curated/ Parquet (miroir local du job Glue)"
 	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
 	@echo "make sagemaker-register  enregistre le modele (gate WAPE)"
@@ -101,6 +104,15 @@ dashboard:
 
 aws-setup:
 	@bash scripts/aws_setup.sh $(SUFFIX)
+
+cfn-import:
+	@CONFIRM_DROP_TABLES=1 bash scripts/cfn.sh import
+
+cfn-deploy:
+	@bash scripts/cfn.sh deploy
+
+cfn-drift:
+	@bash scripts/cfn.sh drift
 
 etl:
 	$(PY) -m retail_forecast.etl.build_curated
