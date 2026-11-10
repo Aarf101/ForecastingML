@@ -118,9 +118,38 @@ domaine Studio : ce sont les deux postes qui coûtent à l'heure (respectivement
 |---|---|---|
 | Amazon MSK | Kafka open-source (Redpanda) en local | MSK est la brique la plus chère et souvent bloquée dans le lab ; l'API est identique |
 | AWS Glue | ETL Python (boto3) sur S3 | 0,44 $/DPU-h pour la même logique ; le sujet cite « Lambda / Glue » |
-| Amazon Bedrock | Ollama `qwen2.5:3b` | Bedrock n'est pas activé dans le lab ; le sujet cite « Hugging Face / OpenLLM » |
-| Amazon QuickSight | Streamlit | Le sujet cite explicitement « Streamlit / Gradio » |
+| Amazon Bedrock | **Endpoint Hugging Face sur SageMaker** (`retail-llm-hf`, serverless, `Qwen2.5-0.5B-Instruct`) | Bedrock est fermé dans le compte : `bedrock:ListFoundationModels` et `bedrock:InvokeModel` renvoient `AccessDeniedException`, et aucune politique du rôle ne mentionne `bedrock`. Le sujet cite « Hugging Face / OpenLLM **sur SageMaker** » |
+| Amazon QuickSight | **Streamlit sur une instance SageMaker** (`retail-forecast-nb`, `ml.t3.medium`, port 8501) | Le sujet cite « Streamlit / Gradio **hébergé sur SageMaker** ». Le domaine Studio est impossible ici : sa création appelle `iam:CreateRole`, refusé par le lab |
 | Glue Crawler | DDL Athena | Un crawler est facturé au DPU, le DDL est gratuit et reproductible |
+
+### 3.2 Contraintes réelles du Learner Lab (et contournements)
+
+Trois services listés par le sujet sont inaccessibles dans le compte Academy ;
+chaque fois, l'erreur a été relevée puis contournée par une alternative citée par
+le sujet lui-même.
+
+| Contrainte | Preuve | Contournement |
+|---|---|---|
+| **Bedrock fermé** | `AccessDeniedException` sur `bedrock:ListFoundationModels` (us-east-1 et us-west-2) et sur `bedrock:InvokeModel` ; aucune politique du rôle ne contient `bedrock` | endpoint Hugging Face sur SageMaker |
+| **Studio impossible** | `create-domain` → *« can't create SageMaker execution role … not authorized to perform: iam:CreateRole »* | notebook instance `ml.t3.medium`, même hébergement SageMaker |
+| **MSK non déployé** | coût horaire (2 brokers minimum) et service fréquemment bloqué en lab | Kafka open-source (Redpanda), autorisé par le sujet |
+
+Ces trois points sont assumés : ce sont des limites de l'environnement, pas des
+raccourcis de conception — et les trois solutions de repli sont explicitement
+listées dans le sujet (diapositives 10-11).
+
+### 3.3 Ce qui tourne réellement, et où
+
+| Composant | Emplacement | Preuve |
+|---|---|---|
+| Lac de données | S3 `retail-forecast-654654161593-ayoub` | 8 préfixes, ~12 Mo |
+| ETL | job Python (Glue en option) | `curated/sales/` |
+| Entraînement | SageMaker Training, `ml.m5.large` | job `retail-lgbm-20261109-145638` |
+| Registre | SageMaker Model Registry | versions 1, 2, 3 |
+| Inférence | SageMaker Batch Transform | `forecast/table/forecast.parquet`, 4 800 lignes |
+| KPI | Athena | tables `curated_sales`, `forecast` |
+| LLM | **SageMaker endpoint** `retail-llm-hf` (serverless) | `InService`, 6 Go, concurrence 3 |
+| Dashboard | **SageMaker notebook instance** `retail-forecast-nb` | `:8501/proxy` |
 
 ## 4. Choix de modèle et hyperparamètres
 

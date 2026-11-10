@@ -1,0 +1,13 @@
+{
+    "NotebookInstances": [
+        {
+            "NotebookInstanceName": "retail-forecast-nb",
+            "NotebookInstanceArn": "arn:aws:sagemaker:us-east-1:654654161593:notebook-instance/retail-forecast-nb",
+            "NotebookInstanceStatus": "InService",
+            "Url": "retail-forecast-nb.notebook.us-east-1.sagemaker.aws",
+            "InstanceType": "ml.t3.medium",
+            "CreationTime": "2026-11-10T17:32:39.967000+01:00",
+            "LastModifiedTime": "2026-11-10T17:37:42.176000+01:00"
+        }
+    ]
+}

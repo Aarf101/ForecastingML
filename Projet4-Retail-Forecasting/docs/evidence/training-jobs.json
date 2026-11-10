@@ -1,0 +1,22 @@
+{
+    "TrainingJobSummaries": [
+        {
+            "TrainingJobName": "retail-lgbm-20261109-145638",
+            "TrainingJobArn": "arn:aws:sagemaker:us-east-1:654654161593:training-job/retail-lgbm-20261109-145638",
+            "CreationTime": "2026-11-09T15:56:40.437000+01:00",
+            "TrainingEndTime": "2026-11-09T16:00:14.743000+01:00",
+            "LastModifiedTime": "2026-11-09T16:00:14.914000+01:00",
+            "TrainingJobStatus": "Completed",
+            "SecondaryStatus": "Completed"
+        },
+        {
+            "TrainingJobName": "retail-lgbm-20261109-144337",
+            "TrainingJobArn": "arn:aws:sagemaker:us-east-1:654654161593:training-job/retail-lgbm-20261109-144337",
+            "CreationTime": "2026-11-09T15:43:38.878000+01:00",
+            "TrainingEndTime": "2026-11-09T15:46:13.581000+01:00",
+            "LastModifiedTime": "2026-11-09T15:46:14.158000+01:00",
+            "TrainingJobStatus": "Completed",
+            "SecondaryStatus": "Completed"
+        }
+    ]
+}

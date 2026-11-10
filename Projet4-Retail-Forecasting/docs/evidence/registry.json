@@ -1,0 +1,34 @@
+{
+    "ModelPackageSummaryList": [
+        {
+            "ModelPackageGroupName": "retail-forecast-lgbm",
+            "ModelPackageVersion": 3,
+            "ModelPackageArn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/3",
+            "ModelPackageDescription": "LightGBM global — job retail-lgbm-20261109-145638",
+            "CreationTime": "2026-11-09T16:01:03.371000+01:00",
+            "ModelPackageStatus": "Completed",
+            "ModelApprovalStatus": "Approved",
+            "ModelPackageRegistrationType": "Registered"
+        },
+        {
+            "ModelPackageGroupName": "retail-forecast-lgbm",
+            "ModelPackageVersion": 2,
+            "ModelPackageArn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/2",
+            "ModelPackageDescription": "LightGBM global — job retail-lgbm-20261109-144337",
+            "CreationTime": "2026-11-09T15:47:49.603000+01:00",
+            "ModelPackageStatus": "Completed",
+            "ModelApprovalStatus": "Approved",
+            "ModelPackageRegistrationType": "Registered"
+        },
+        {
+            "ModelPackageGroupName": "retail-forecast-lgbm",
+            "ModelPackageVersion": 1,
+            "ModelPackageArn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/1",
+            "ModelPackageDescription": "LightGBM global — job retail-lgbm-20261109-144337",
+            "CreationTime": "2026-11-09T15:47:27.330000+01:00",
+            "ModelPackageStatus": "Completed",
+            "ModelApprovalStatus": "PendingManualApproval",
+            "ModelPackageRegistrationType": "Registered"
+        }
+    ]
+}

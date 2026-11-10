@@ -1,0 +1,11 @@
+{
+    "Endpoints": [
+        {
+            "EndpointName": "retail-llm-hf",
+            "EndpointArn": "arn:aws:sagemaker:us-east-1:654654161593:endpoint/retail-llm-hf",
+            "CreationTime": "2026-11-10T16:40:36.937000+01:00",
+            "LastModifiedTime": "2026-11-10T17:08:47.938000+01:00",
+            "EndpointStatus": "InService"
+        }
+    ]
+}
