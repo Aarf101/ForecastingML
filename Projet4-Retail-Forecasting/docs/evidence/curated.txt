@@ -1,0 +1,5 @@
+2026-11-09 15:39:59    2329495 curated/sales/sales.parquet
+2026-11-10 18:12:31     508932 curated/sales_glue/part-00000-e73b649e-1d7b-49be-9f91-e993320610f8-c000.snappy.parquet
+2026-11-10 18:12:31     560466 curated/sales_glue/part-00001-e73b649e-1d7b-49be-9f91-e993320610f8-c000.snappy.parquet
+2026-11-10 18:12:31     565744 curated/sales_glue/part-00002-e73b649e-1d7b-49be-9f91-e993320610f8-c000.snappy.parquet
+2026-11-10 18:12:31     594866 curated/sales_glue/part-00003-e73b649e-1d7b-49be-9f91-e993320610f8-c000.snappy.parquet

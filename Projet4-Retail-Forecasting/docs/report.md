@@ -74,6 +74,29 @@ Trois règles, identiques à celles qu'appliquerait un job Glue :
 Résultat mesuré : `876 000 lignes brutes → 876 000 lignes propres`, période
 2023-01-01 → 2024-12-30, 1 200 séries, 2,33 Mo en Parquet snappy.
 
+### 2.3 bis Le même ETL en Glue (job Spark managé)
+
+Le même nettoyage a été exécuté par un **job AWS Glue** (`retail-etl-raw-to-curated`,
+Spark 4.0, 2 × G.1X), à partir du script `infra/glue/etl_spark.py`. Objectif :
+prouver que la logique passe à l'échelle sur le service managé, et pas seulement
+en pandas.
+
+Résultat identique, vérifié après coup en relisant les objets S3 :
+
+| | Python (pandas) | Glue (Spark) |
+|---|---|---|
+| Fichiers produits | 1 (`sales.parquet`) | 4 (`part-*.snappy.parquet`) |
+| Lignes | 876 000 | **876 000** |
+| Séries | 1 200 | **1 200** |
+| Doublons | 0 | **0** |
+| Taille | 2,33 Mo | 2,23 Mo |
+| Coût | 0 € | ≈ 0,15 € (minimum facturé 10 min) |
+
+Les deux sorties sont conservées : `curated/sales/` alimente le Training Job
+(format validé), `curated/sales_glue/` est la preuve du passage à Glue. Le canal
+SageMaker lit un préfixe (`S3Prefix`), donc il accepterait indifféremment l'un ou
+l'autre — c'est le point à mentionner si on demande « pourquoi deux dossiers ».
+
 ### 2.4 Entraînement
 
 Voir §4. Le script tourne **dans** le conteneur SageMaker, avec le même paquet
