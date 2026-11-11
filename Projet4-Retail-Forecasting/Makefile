@@ -2,8 +2,18 @@
         produce consume e2e slides lettre dashboard clean aws-setup etl \
         sagemaker-train
 
-PY  := .venv/bin/python
-PIP := .venv/bin/pip
+# --- Détection de l'OS -------------------------------------------------------
+# Linux / macOS / WSL : .venv/bin        Windows (Git Bash, cmd) : .venv/Scripts
+ifeq ($(OS),Windows_NT)
+  VENV_BIN := .venv/Scripts
+  PYTHON   ?= python
+else
+  VENV_BIN := .venv/bin
+  PYTHON   ?= python3
+endif
+
+PY  := $(VENV_BIN)/python
+PIP := $(VENV_BIN)/pip
 
 help:
 	@echo "make setup        venv (.venv) + dépendances"
@@ -48,7 +58,7 @@ help:
 	@echo "make lettre       régénère docs/lettre_motivation.pdf (lettre de motivation)"
 
 setup:
-	python3 -m venv --system-site-packages .venv
+	$(PYTHON) -m venv --system-site-packages .venv
 	$(PIP) install -e . -r requirements.txt
 
 env:

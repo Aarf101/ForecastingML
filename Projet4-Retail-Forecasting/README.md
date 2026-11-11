@@ -43,6 +43,11 @@ make diagram      # régénère docs/diagrams/architecture.{png,svg}
 make slides       # régénère docs/slides.pptx (exposé idée projet, 5 slides)
 ```
 
+**Sous Windows** : `make` n'est pas installé par défaut et les venv utilisent
+`.venv\Scripts\`. Utiliser `.\scripts\run.ps1 <tâche>` (PowerShell natif), Git Bash
+ou WSL — voir [docs/windows.md](docs/windows.md). Le `Makefile` détecte l'OS tout
+seul ; seuls les scripts `.sh` demandent bash.
+
 ## Ingestion (Phase 3) — la même API que sur AWS
 
 ```

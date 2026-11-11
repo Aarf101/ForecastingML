@@ -48,7 +48,9 @@ infra/sagemaker/
   launch.py            boto3 create_training_job + packaging sourcedir.tar.gz
   register.py          Model Registry (gate WAPE_THRESHOLD -> Approved)
 docs/  architecture.md (doc de référence), learner_lab.md (accès au compte AWS),
-       script.md (script oral), slides.md, diagrams/
+       windows.md (poste Windows : run.ps1, Git Bash, WSL), script.md (script oral),
+       slides.md, diagrams/
+scripts/ run.ps1 (équivalent PowerShell du Makefile pour Windows)
 tests/ test_metrics, test_features, test_ingest, test_simulate
 ```
 

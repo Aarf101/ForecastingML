@@ -100,6 +100,24 @@ def build_inference_rows(sales: pd.DataFrame, features: list[str], horizons: lis
     return out
 
 
+def _role() -> str:
+    """Rôle d'exécution du modèle.
+
+    ``SAGEMAKER_ROLE_ARN`` n'est pas toujours défini (ex. exécution depuis une
+    instance EC2 où seul ``LabRole`` est disponible) : on retombe sur le rôle du
+    compte, sinon ``ExecutionRoleArn`` part vide et l'API répond
+    « Invalid length for parameter ExecutionRoleArn ».
+    """
+    if SETTINGS.role_arn:
+        return SETTINGS.role_arn
+    import boto3 as _boto3
+
+    account = _boto3.client("sts", region_name=SETTINGS.region).get_caller_identity()[
+        "Account"
+    ]
+    return f"arn:aws:iam::{account}:role/LabRole"
+
+
 def ensure_model(sm, name: str, image: str, model_url: str) -> str:
     """Crée la ressource Model (conteneur + artefact + handler d'inférence)."""
     try:
@@ -119,7 +137,7 @@ def ensure_model(sm, name: str, image: str, model_url: str) -> str:
                     "SAGEMAKER_REQUIREMENTS": "/opt/ml/model/requirements.txt",
                 },
             },
-            ExecutionRoleArn=SETTINGS.role_arn,
+            ExecutionRoleArn=_role(),
         )
         print(f"[transform] modèle créé : {name}")
     return name

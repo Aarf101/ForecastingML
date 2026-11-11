@@ -11,6 +11,9 @@
 set -euo pipefail
 
 PY=".venv/bin/python"
+[ -x "$PY" ] || PY=".venv/Scripts/python.exe"
+[ -x "$PY" ] || PY="python3"
+[ -x "$PY" ] || PY="python"
 BUCKET=$(grep -E '^S3_BUCKET=' .env | cut -d= -f2-)
 SKIP_INGEST=0
 SKIP_ORCH=0

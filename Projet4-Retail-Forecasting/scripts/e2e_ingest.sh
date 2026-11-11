@@ -6,7 +6,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PY=".venv/bin/python"
+[ -x "$PY" ] || PY=".venv/Scripts/python.exe"
 [ -x "$PY" ] || PY="python3"
+[ -x "$PY" ] || PY="python"
 [ -f .env ] || cp .env.example .env
 
 N=${N:-3000}          # messages à rejouer

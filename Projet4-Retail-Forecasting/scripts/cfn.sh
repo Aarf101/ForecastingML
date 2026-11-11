@@ -63,7 +63,11 @@ case "$MODE" in
     # adopter (non importables) et refuserait de les recréer. On supprime donc
     # leurs métadonnées ; les fichiers Parquet dans S3 ne sont pas touchés.
     if [ "${CONFIRM_DROP_TABLES:-0}" = "1" ]; then
-      ( cd "$(dirname "$TEMPLATE")/.." && .venv/bin/python -m infra.athena.setup --drop )
+      PY=".venv/bin/python"
+      [ -x "$PY" ] || PY=".venv/Scripts/python.exe"
+      [ -x "$PY" ] || PY="python3"
+      [ -x "$PY" ] || PY="python"
+      ( cd "$(dirname "$TEMPLATE")/.." && "$PY" -m infra.athena.setup --drop )
     else
       echo "  [ATTENTION] relancer avec CONFIRM_DROP_TABLES=1 pour supprimer les
               tables Glue existantes (métadonnées) avant l'import." >&2

@@ -1,0 +1,21 @@
+# Normalisation des fins de ligne : le dépôt stocke du LF, quel que soit l'OS.
+# Sans ce fichier, Git for Windows (core.autocrlf=true) réécrit les .sh en CRLF
+# et bash échoue avec « \r: command not found ».
+* text=auto eol=lf
+
+# Scripts shell : LF obligatoire.
+*.sh   text eol=lf
+
+# PowerShell accepte LF ; les .bat de cmd veulent CRLF.
+*.ps1  text eol=lf
+*.bat  text eol=crlf
+
+# Binaires : jamais de conversion.
+*.png     binary
+*.jpg     binary
+*.pdf     binary
+*.pptx    binary
+*.parquet binary
+*.gz      binary
+*.tar.gz  binary
+*.svg     text eol=lf
