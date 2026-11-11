@@ -14,8 +14,9 @@ déduplication sur (store_id, item_id, date) en gardant la **dernière réceptio
 des DPU Glue, donc il est facturé à la minute (0,44 $/DPU-h, minimum 10 min).
 
 Paramètres de job attendus : ``--BUCKET`` (obligatoire), ``--TARGET`` (optionnel,
-défaut ``curated/sales_glue/`` pour ne pas écraser le Parquet déjà utilisé par le
-Training Job ; mettre ``curated/sales/`` une fois le résultat validé).
+défaut ``curated/sales/`` — le dossier lu par le Training Job ; le Parquet
+historique reste disponible dans ``raw/historique/`` pour reconstruire un
+``curated/`` propre avec ``make etl``).
 """
 
 import sys
@@ -56,7 +57,7 @@ job.init(args["JOB_NAME"], args)
 bucket = args["BUCKET"]
 batches_path = f"s3://{bucket}/raw/sales/"
 history_path = f"s3://{bucket}/raw/historique/"
-target = f"s3://{bucket}/{args.get('TARGET', 'curated/sales_glue/').lstrip('/')}"
+target = f"s3://{bucket}/{args.get('TARGET', 'curated/sales/').lstrip('/')}"
 
 
 def has_objects(path: str) -> bool:

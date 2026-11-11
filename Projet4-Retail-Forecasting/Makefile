@@ -25,6 +25,7 @@ help:
 	@echo "make aws-pipeline-run execute le pipeline de bout en bout"
 	@echo "make aws-pipeline-status etat machine/regle/executions"
 	@echo "make aws-pipeline-down supprime machine + regle + lambda"
+	@echo "make aws-full-run     pipeline complet dans AWS (ingestion -> transform -> athena)"
 	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
 	@echo "make sagemaker-register  enregistre le modele (gate WAPE)"
 	@echo "make sagemaker-transform Batch Transform -> forecast/"
@@ -165,6 +166,9 @@ aws-pipeline-asl:
 
 aws-pipeline-down:
 	$(PY) -m infra.aws.orchestrate down
+
+aws-full-run:
+	@bash scripts/aws_full_run.sh $(ARGS)
 
 
 sagemaker-train:

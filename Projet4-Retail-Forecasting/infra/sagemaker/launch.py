@@ -140,6 +140,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wait", action="store_true", help="attendre la fin du job")
     parser.add_argument("--dry-run", action="store_true", help="ne rien envoyer à AWS")
     parser.add_argument("--name", default="", help="nom du job (défaut horodaté)")
+    parser.add_argument(
+        "--upload-only",
+        action="store_true",
+        help="dépose seulement le code dans S3 (pas de Training Job)",
+    )
     args = parser.parse_args(argv)
 
     if not SETTINGS.bucket or not SETTINGS.role_arn:
@@ -156,6 +161,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     upload_code(client, SETTINGS.bucket)
+    if args.upload_only:
+        print(f"[launch] code déposé : s3://{SETTINGS.bucket}/{SOURCEDIR_KEY}")
+        return 0
     print(f"[launch] job {job_name} sur {INSTANCE} (max {MAX_RUNTIME // 60} min)")
     sm.create_training_job(**request)
 
