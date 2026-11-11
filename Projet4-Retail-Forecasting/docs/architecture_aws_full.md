@@ -38,7 +38,7 @@ et la commande qui la crée.
 | 2 | Transport d'événements | **Kinesis Data Streams** | `retail-sales-stream` (1 shard) | `make aws-ingest-up` |
 | 3 | Livraison vers le lac | **Firehose** | `retail-sales-to-s3` | `make aws-ingest-up` |
 | 4 | Lac brut | **S3** | `raw/`, `curated/`, `models/`, `forecast/`, `reports/` | `make aws-setup` |
-| 5 | ETL / nettoyage | **Glue** (PySpark) | `retail-etl-raw-to-curated` | console ou `make cfn-*` |
+| 5 | ETL / nettoyage | **Glue** (PySpark) | `retail-etl-raw-to-curated` | `make aws-pipeline-up` |
 | 6 | Features | **SageMaker** (dans le conteneur d'entraînement) | `train_entry.py` | inclus dans le code |
 | 7 | Entraînement | **SageMaker Training** | `retail-lgbm-<run_id>` | état `TrainModel` |
 | 8 | Évaluation + gate | **Lambda** | `retail-register-model` | `make aws-pipeline-up` |
@@ -57,13 +57,7 @@ et la commande qui la crée.
 # .env : S3_ENDPOINT_URL=  AWS_ACCESS_KEY_ID=  AWS_SECRET_ACCESS_KEY=  AWS_PROFILE=lab
 
 make aws-setup            # bucket + dataset historique
-make aws-ingest-prep      # parquet -> morceaux JSONL gzip dans replay/
-make aws-ingest-up        # Kinesis + Firehose + Lambda producteur
-make aws-ingest-run       # rejeu des événements dans Kinesis
-make aws-pipeline-up      # state machine + règle EventBridge + Lambda de gate
-make aws-pipeline-run     # exécution Glue -> Training -> Gate -> Registry
-make sagemaker-transform  # Batch Transform -> forecast/
-make athena               # tables externes + KPI
+make aws-full-run         # TOUT le reste, dans l ordre, avec arrêt sur erreur
 ```
 
 `make aws-pipeline-status` affiche l'état de la machine, de la règle et des
@@ -107,3 +101,62 @@ preuves du projet.
 | Endpoint LLM (serverless) | à la requête | < 0,01 $ |
 | Instance SageMaker (dashboard) | 1 h | 0,05 $ |
 | **Total** | | **≈ 0,24 $** |
+
+## 7. Exécuter depuis l'intérieur du lab (sans `make`, sans poste de travail)
+
+### 7.1 Terminal d'une instance SageMaker — recommandé
+
+Une fois, depuis le poste de travail : `make aws-upload-repo`
+(dépose `s3://…/code/repo.tar.gz`). Ensuite, **dans le terminal Jupyter** de
+l'instance, plus besoin du poste :
+
+```bash
+aws s3 cp s3://retail-forecast-654654161593-ayoub/code/repo.tar.gz /tmp/repo.tar.gz
+mkdir -p ~/retail && tar xzf /tmp/repo.tar.gz -C ~/retail --strip-components=1
+cd ~/retail && pip install -q -e . -r requirements.txt
+python -m infra.aws.full_run
+```
+
+Ou directement : `bash scripts/bootstrap.sh --run` (script fourni, il fait les
+quatre lignes ci-dessus).
+
+`infra.aws.full_run` est du **Python pur** : ni bash, ni Makefile, ni git. Il
+enchaîne les dix étapes, s'arrête à la première erreur, et accepte :
+
+```bash
+python -m infra.aws.full_run --list                  # décrire les étapes
+python -m infra.aws.full_run --skip-ingest           # réutiliser raw/ existant
+python -m infra.aws.full_run --skip-orchestration    # sans Step Functions
+python -m infra.aws.full_run --only orchestrate-run  # une seule étape
+```
+
+### 7.2 Console uniquement (aucune ligne de commande)
+
+| Action | Où | Geste |
+|---|---|---|
+| Lancer l'ingestion | Lambda `retail-replay-to-kinesis` → onglet **Test** | événement `{"max_seconds": 300}` |
+| Créer l'infra d'ingestion | Kinesis / Firehose / Lambda | une fois (ou `make aws-ingest-up`) |
+| Lancer le pipeline | Step Functions → `retail-forecast-pipeline` → **Start execution** | entrée `{"run_id": "manuel-1"}` |
+| Vérifier | S3, Athena, Model Registry | consultation |
+| Planification | EventBridge → `retail-forecast-daily` | déjà active |
+
+Le graphe Step Functions est la preuve visuelle demandée par le sujet :
+`RunETL → TrainModel → GateWAPE → ModeleApprouve → Publie`.
+
+### 7.3 CloudShell
+
+CloudShell a Python 3 + boto3 et hérite des droits de la session :
+
+```bash
+aws s3 cp s3://$BUCKET/code/repo.tar.gz /tmp/r.tgz
+mkdir -p ~/r && tar xzf /tmp/r.tgz -C ~/r --strip-components=1
+cd ~/r && pip install -q -e . && python -m infra.aws.full_run --skip-ingest
+```
+
+## 8. Ce que le pipeline ne fait pas encore
+
+| Élément | Raison |
+|---|---|
+| Model Monitor | facturé à l'heure ; la dérive est couverte par le tableau de volatilité du dashboard |
+| Batch Transform dans la state machine | laissé hors ASL pour garder le graphe lisible ; `python -m infra.sagemaker.batch_transform` après l'exécution |
+| Promotion automatique d'une version rejetée | volontaire : c'est le rôle du gate (v1 est restée `PendingManualApproval`) |

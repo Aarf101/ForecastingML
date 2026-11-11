@@ -18,6 +18,7 @@ Usage :
 from __future__ import annotations
 
 import argparse
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -27,6 +28,22 @@ from retail_forecast.ingest.producer import record_from_row
 from retail_forecast.ingest.storage import s3_client, to_gzip_jsonl
 
 PREFIX = "replay/sales"
+HISTORY_KEY = "raw/historique/sales.parquet"
+
+
+def _load_frame(client, bucket: str) -> pd.DataFrame:
+    """Dataset source : le Parquet local s'il existe, sinon celui du lac S3.
+
+    Le repli S3 est ce qui permet d'exécuter ce script **depuis l'intérieur
+    d'AWS** (instance SageMaker, conteneur) où ``data/raw/`` n'existe pas.
+    """
+    local = Path(RAW_DIR) / "sales.parquet"
+    if local.exists():
+        print(f"[replay] source locale : {local}")
+        return pd.read_parquet(local)
+    print(f"[replay] source S3 : s3://{bucket}/{HISTORY_KEY}")
+    body = client.get_object(Bucket=bucket, Key=HISTORY_KEY)["Body"].read()
+    return pd.read_parquet(io.BytesIO(body))
 
 
 def _clean_prefix(client, bucket: str) -> int:
@@ -51,12 +68,12 @@ def main(argv: list[str] | None = None) -> int:
     if not SETTINGS.bucket:
         raise SystemExit("S3_BUCKET vide dans .env : lancer d'abord 'make aws-setup'")
 
-    frame = pd.read_parquet(Path(RAW_DIR) / "sales.parquet")
+    client = s3_client()
+    frame = _load_frame(client, SETTINGS.bucket)
     if args.limit:
         frame = frame.head(args.limit)
     print(f"[replay] {len(frame):,} lignes à découper ({args.rows:,} par objet)")
 
-    client = s3_client()
     if args.delete:
         print(f"[replay] purge : {_clean_prefix(client, SETTINGS.bucket)} objet(s) supprimé(s)")
 

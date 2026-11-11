@@ -53,8 +53,8 @@ def _clients() -> dict:
 
 def _role_arn(c: dict) -> str:
     """Rôle d'exécution : celui du lab (``LabRole``), jamais un rôle créé."""
-    if SETTINGS.sagemaker_role_arn:
-        return SETTINGS.sagemaker_role_arn
+    if SETTINGS.role_arn:
+        return SETTINGS.role_arn
     account = c["sts"].get_caller_identity()["Account"]
     return f"arn:aws:iam::{account}:role/LabRole"
 
