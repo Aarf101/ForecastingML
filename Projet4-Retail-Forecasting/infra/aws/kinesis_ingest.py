@@ -91,7 +91,15 @@ def create_stream(c: dict) -> None:
 
 
 def create_delivery_stream(c: dict, role: str) -> None:
-    """Firehose : source = le stream, destination = S3 partitionné par date."""
+    """Firehose : source = le stream, destination = S3 ``raw/sales/``.
+
+    Note : le partitionnement dynamique (``!{timestamp:…}`` dans le préfixe) est
+    refusé par cette API/version — l'erreur est « S3 Prefix should contain
+    Dynamic Partitioning namespaces when Dynamic Partitioning is enabled » même
+    avec la syntaxe documentée. On utilise donc un préfixe statique : Firehose
+    nomme les objets ``<stream>-…-<uuid>.gz`` et la partition temporelle est
+    portée par le champ ``date`` des événements, ce que le job Glue exploite.
+    """
     try:
         state = c["firehose"].describe_delivery_stream(DeliveryStreamName=DELIVERY)[
             "DeliveryStreamDescription"
@@ -99,6 +107,16 @@ def create_delivery_stream(c: dict, role: str) -> None:
         if state == "ACTIVE":
             print(f"[firehose] {DELIVERY} existe déjà (ACTIVE)")
             return
+        if state in ("CREATING", "UPDATING"):
+            print(f"[firehose] {DELIVERY} en cours ({state}) : attente…")
+            for _ in range(60):
+                time.sleep(3)
+                state = c["firehose"].describe_delivery_stream(
+                    DeliveryStreamName=DELIVERY
+                )["DeliveryStreamDescription"]["DeliveryStreamStatus"]
+                if state == "ACTIVE":
+                    print(f"[firehose] {DELIVERY} ACTIVE")
+                    return
         raise RuntimeError(f"{DELIVERY} existe en état {state} : lancer 'down' d'abord")
     except c["firehose"].exceptions.ResourceNotFoundException:
         pass
@@ -114,16 +132,13 @@ def create_delivery_stream(c: dict, role: str) -> None:
         ExtendedS3DestinationConfiguration={
             "BucketARN": f"arn:aws:s3:::{bucket}",
             "RoleARN": role,
-            # Partitionnement dynamique : un « dossier » par jour de livraison,
-            # même convention que la clé brute produite localement auparavant.
-            "Prefix": "raw/sales/ingest_date=!{timestamp:yyyy-MM-dd}/",
+            "Prefix": "raw/sales/",
             "ErrorOutputPrefix": "raw/_errors/!{firehose:error-output-type}/",
             "BufferingHints": {"SizeInMBs": 5, "IntervalInSeconds": 60},
             "CompressionFormat": "GZIP",
-            "DynamicPartitioningConfiguration": {"Enabled": True},
         },
     )
-    print(f"[firehose] création de {DELIVERY} -> s3://{bucket}/raw/sales/ingest_date=…/")
+    print(f"[firehose] création de {DELIVERY} -> s3://{bucket}/raw/sales/")
 
     for _ in range(60):
         state = c["firehose"].describe_delivery_stream(DeliveryStreamName=DELIVERY)[

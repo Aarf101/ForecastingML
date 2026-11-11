@@ -61,6 +61,12 @@ def _role_arn(c: dict) -> str:
     return f"arn:aws:iam::{c['sts'].get_caller_identity()['Account']}:role/LabRole"
 
 
+def _machine_arn(c: dict) -> str:
+    """ARN complet de la state machine (``describe_state_machine`` l'exige)."""
+    account = c["sts"].get_caller_identity()["Account"]
+    return f"arn:aws:states:{REGION}:{account}:stateMachine:{MACHINE}"
+
+
 
 def definition(role: str, lambda_arn: str) -> dict:
     """Définition Amazon States Language (ASL) du pipeline."""
@@ -238,7 +244,8 @@ def deploy_machine(c: dict, role: str, lambda_arn: str) -> str:
     """Crée ou met à jour la state machine ; renvoie son ARN."""
     text = json.dumps(definition(role, lambda_arn))
     try:
-        arn = c["sfn"].describe_state_machine(stateMachineArn=MACHINE)["stateMachineArn"]
+        arn = _machine_arn(c)
+        c["sfn"].describe_state_machine(stateMachineArn=arn)
         c["sfn"].update_state_machine(stateMachineArn=arn, definition=text, roleArn=role)
         print(f"[sfn] {MACHINE} mise à jour")
         return arn
@@ -281,13 +288,14 @@ def deploy_rule(c: dict, machine_arn: str, role: str, schedule: str) -> None:
 def run(c: dict, machine_arn: str, wait: bool = True, run_id: str = "") -> dict:
     """Démarre une exécution ; attend la fin si demandé."""
     run_id = run_id or f"{datetime.now(timezone.utc):%Y%m%dT%H%M%S}"
+    name = f"run-{run_id}"[:80]
     resp = c["sfn"].start_execution(
         stateMachineArn=machine_arn,
-        name=f"run-{run_id}"[:80],
+        name=name,
         input=json.dumps({"run_id": run_id}),
     )
     arn = resp["executionArn"]
-    print(f"[sfn] exécution {resp['name']} démarrée (run_id={run_id})")
+    print(f"[sfn] exécution {name} démarrée (run_id={run_id})")
     if not wait:
         return {"executionArn": arn, "status": "RUNNING"}
 
@@ -306,9 +314,10 @@ def run(c: dict, machine_arn: str, wait: bool = True, run_id: str = "") -> dict:
 def status(c: dict) -> None:
     """État de la machine, de la règle et des trois dernières exécutions."""
     try:
-        machine = c["sfn"].describe_state_machine(stateMachineArn=MACHINE)
+        machine_arn = _machine_arn(c)
+        machine = c["sfn"].describe_state_machine(stateMachineArn=machine_arn)
         print(f"sfn      : {MACHINE} {machine['status']}")
-        for ex in c["sfn"].list_executions(stateMachineArn=MACHINE, maxResults=3)[
+        for ex in c["sfn"].list_executions(stateMachineArn=machine_arn, maxResults=3)[
             "executions"
         ]:
             print(f"           {ex['name']:<32} {ex['status']}")
@@ -338,7 +347,7 @@ def down(c: dict) -> None:
         print(f"[events] {RULE} déjà absente")
 
     try:
-        c["sfn"].delete_state_machine(stateMachineArn=MACHINE)
+        c["sfn"].delete_state_machine(stateMachineArn=_machine_arn(c))
         print(f"[sfn] {MACHINE} supprimée")
     except c["sfn"].exceptions.StateMachineDoesNotExist:
         print(f"[sfn] {MACHINE} déjà absente")
@@ -388,7 +397,9 @@ def deploy_glue_job(c: dict, role: str) -> None:
 
     try:
         c["glue"].get_job(JobName=GLUE_JOB)
-        c["glue"].update_job(JobName=GLUE_JOB, JobUpdate=job)
+        # ``JobUpdate`` n'accepte pas ``Name`` (déjà dans JobName).
+        update = {k: v for k, v in job.items() if k != "Name"}
+        c["glue"].update_job(JobName=GLUE_JOB, JobUpdate=update)
         print(f"[glue] {GLUE_JOB} mis à jour ({script_location})")
     except c["glue"].exceptions.EntityNotFoundException:
         c["glue"].create_job(**job)
@@ -426,9 +437,7 @@ def main(argv: list[str] | None = None) -> int:
         deploy_rule(c, machine_arn, role, args.schedule)
         print(f"[done] {machine_arn}")
     elif args.action == "run":
-        machine_arn = c["sfn"].describe_state_machine(stateMachineArn=MACHINE)[
-            "stateMachineArn"
-        ]
+        machine_arn = _machine_arn(c)
         print(json.dumps(run(c, machine_arn, not args.no_wait, args.run_id), indent=2))
     elif args.action == "status":
         status(c)

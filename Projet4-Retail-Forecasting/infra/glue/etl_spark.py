@@ -27,6 +27,14 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from pyspark.sql import Window
 from pyspark.sql import functions as F
+from pyspark.sql.types import (
+    FloatType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 # Schéma cible commun aux deux sources : un lot JSONL et une ligne Parquet
 # n'ont pas les mêmes types (date texte vs timestamp, event_time absent de
@@ -60,6 +68,19 @@ history_path = f"s3://{bucket}/raw/historique/"
 target = f"s3://{bucket}/{args.get('TARGET', 'curated/sales/').lstrip('/')}"
 
 
+_TYPES = {
+    "timestamp": TimestampType(),
+    "string": StringType(),
+    "int": IntegerType(),
+    "float": FloatType(),
+}
+
+
+def struct():
+    """StructType explicite : l'inférence échoue sur les objets gzip de Firehose."""
+    return StructType([StructField(n, _TYPES[t], True) for n, t in SCHEMA.items()])
+
+
 def has_objects(path: str) -> bool:
     """Vrai si le préfixe S3 contient au moins un objet (hors marqueurs _)."""
     jvm = spark._jvm
@@ -88,7 +109,7 @@ frames = []
 
 # 1. micro-lots du flux Kafka (JSONL gzip : Spark gère le .gz nativement)
 if has_objects(batches_path):
-    batches = spark.read.json(batches_path)
+    batches = spark.read.schema(struct()).json(batches_path)
     n = batches.count()
     print(f"[glue] lots Kafka lus : {n:,} lignes ({batches_path})")
     if n:

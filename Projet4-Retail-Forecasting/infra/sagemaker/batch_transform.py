@@ -34,6 +34,28 @@ FORECAST_KEY = "forecast/table/forecast.parquet"
 INSTANCE = "ml.m5.large"
 
 
+def read_curated(s3) -> pd.DataFrame:
+    """Lit **tout** ``curated/sales/`` (le job Glue écrit des ``part-*.parquet``).
+
+    Lire une clé unique ``curated/sales/sales.parquet`` échouait dès que Glue
+    avait repris la main sur le préfixe : on liste donc le préfixe et on
+    concatène, comme le fait le canal d'entraînement SageMaker (``S3Prefix``).
+    """
+    paginator = s3.get_paginator("list_objects_v2")
+    frames: list[pd.DataFrame] = []
+    for page in paginator.paginate(Bucket=SETTINGS.bucket, Prefix="curated/sales/"):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if not key.endswith((".parquet", ".pq")):
+                continue
+            body = s3.get_object(Bucket=SETTINGS.bucket, Key=key)["Body"].read()
+            frames.append(pd.read_parquet(io.BytesIO(body)))
+            print(f"[transform] lu {key} ({obj['Size'] / 1024:.0f} Ko)")
+    if not frames:
+        raise FileNotFoundError("aucun Parquet sous curated/sales/")
+    return pd.concat(frames, ignore_index=True)
+
+
 def approved_model(sm) -> tuple[str, str, int]:
     """Renvoie (ModelDataUrl, Image, version) du dernier modèle approuvé."""
     packages = sm.list_model_packages(
@@ -197,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Batch Transform -> forecast/")
     parser.add_argument("--horizons", default="1,7,14,28")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="dépose seulement l'entrée du job (parcours console)",
+    )
     args = parser.parse_args(argv)
     horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
 
@@ -205,18 +232,19 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[transform] modèle approuvé v{version} : {model_url}")
 
     features = model_features(s3, model_url)
-    sales = pd.read_parquet(
-        io.BytesIO(
-            s3.get_object(Bucket=SETTINGS.bucket, Key="curated/sales/sales.parquet")[
-                "Body"
-            ].read()
-        )
-    )
+    sales = read_curated(s3)
     sales["date"] = pd.to_datetime(sales["date"])
     rows = build_inference_rows(sales, features, horizons)
 
     if args.dry_run:
         print(rows[["store_id", "item_id", "horizon", "target_date"]].head(6).to_string())
+        return 0
+
+    if args.prepare_only:
+        # Sert au parcours 100 % console : on dépose seulement l'entrée du job,
+        # puis on crée le modèle et le Batch Transform à la main dans la console.
+        uri = upload_rows(s3, rows, features)
+        print(f"[transform] entrée prête : {uri} ({len(rows):,} lignes)")
         return 0
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
