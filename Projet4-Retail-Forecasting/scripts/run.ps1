@@ -23,6 +23,8 @@ param(
         'help', 'setup', 'env', 'test', 'data', 'train', 'train-quick',
         'etl', 'diagram', 'slides', 'dashboard', 'brief',
         'aws-inventory', 'aws-setup', 'aws-bootstrap', 'aws-run',
+        'aws-firehose-up', 'kafka-all', 'kafka-up', 'kafka-run',
+        'kafka-status', 'kafka-down',
         'aws-upload-repo', 'aws-teardown'
     )]
     [string]$Task = 'help'
@@ -67,6 +69,12 @@ Usage : .\scripts\run.ps1 <tache>
   brief        rapport hebdo via Ollama
 
   aws-inventory    inventaire des ressources AWS présentes
+  aws-firehose-up  crée le Firehose DirectPut (Kafka -> S3)
+  kafka-all        EC2 + Kafka + deps + producteur + pont Firehose (7 min)
+  kafka-up         crée l'EC2 Kafka et installe pip + le dépôt
+  kafka-run        rejoue 20 000 ventes et pousse vers Firehose
+  kafka-status     état du Kafka (IP privée + conteneur)
+  kafka-down       supprime l'EC2 et le groupe de sécurité
   aws-setup        bucket S3 + upload du dataset
   aws-bootstrap    crée toute l'infrastructure AWS
   aws-run          pipeline complet (ingestion -> transform -> athena)
@@ -111,6 +119,16 @@ Les scripts .sh (make up / produce / consume) nécessitent Git Bash ou WSL.
     'aws-setup'        { Invoke-Py @('-m', 'infra.aws.setup') }
     'aws-bootstrap'    { Invoke-Py @('-m', 'infra.aws.setup') }
     'aws-run'          { Invoke-Py @('-m', 'infra.aws.full_run') }
+
+    # Kafka sur EC2 + Firehose : la commande 'all' cree l'instance, installe les
+    # dependances sur l'EC2 (via SSM) et rejoue le dataset.
+    'aws-firehose-up'  { Invoke-Py @('-m', 'infra.aws.firehose_direct', 'up') }
+    'kafka-all'        { Invoke-Py @('-m', 'infra.aws.ec2_kafka', 'all', '--limit', '20000') }
+    'kafka-up'         { Invoke-Py @('-m', 'infra.aws.ec2_kafka', 'up', '--with-deps') }
+    'kafka-run'        { Invoke-Py @('-m', 'infra.aws.ec2_kafka', 'run', '--limit', '20000') }
+    'kafka-status'     { Invoke-Py @('-m', 'infra.aws.ec2_kafka', 'status') }
+    'kafka-down'       { Invoke-Py @('-m', 'infra.aws.ec2_kafka', 'down') }
+
     'aws-upload-repo'  { & bash scripts/upload_repo.sh }
     'aws-teardown'     { & bash scripts/aws_teardown.sh }
 }

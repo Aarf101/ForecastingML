@@ -1,6 +1,7 @@
 .PHONY: help setup env up down ps logs data test train train-quick diagram \
         produce consume e2e slides lettre dashboard clean aws-setup etl \
         aws-firehose-up aws-firehose-status aws-firehose-down ingest-firehose \
+        kafka-all kafka-up kafka-run kafka-status kafka-down \
         sagemaker-train
 
 # --- Détection de l'OS -------------------------------------------------------
@@ -31,6 +32,11 @@ help:
 	@echo "make aws-ingest-up    cree Kinesis + Firehose + Lambda (ingestion 100% AWS)"
 	@echo "make aws-ingest-run   rejoue le dataset dans Kinesis (via Lambda)"
 	@echo "make aws-ingest-status etat Kinesis/Firehose/Lambda + objets raw/sales/"
+	@echo "make kafka-all    EC2 + Kafka + deps + producteur + pont Firehose (7 min)"
+	@echo "make kafka-up     cree l'EC2 Kafka et installe pip + le depot"
+	@echo "make kafka-run    rejoue 20 000 ventes et pousse vers Firehose"
+	@echo "make kafka-status etat du Kafka (IP + conteneur)"
+	@echo "make kafka-down   supprime l'EC2 et le groupe de securite"
 	@echo "make aws-firehose-up  Kafka -> Firehose DirectPut (schema de la diapo)"
 	@echo "make ingest-firehose  pont Kafka -> Firehose (sur l'EC2, dans le compte)"
 	@echo "make aws-ingest-down  supprime Kinesis + Firehose + Lambda"
@@ -156,7 +162,23 @@ etl:
 aws-ingest-prep:
 	$(PY) scripts/prepare_replay_chunks.py --rows 20000 --delete
 
-# --- ingestion fidèle au schéma : Kafka -> Firehose (DirectPut) -> S3 ---------
+# --- Kafka sur EC2 : tout en un (instance + deps + producteur + pont) ---------
+kafka-all:
+	$(PY) -m infra.aws.ec2_kafka all --limit 20000
+
+kafka-up:
+	$(PY) -m infra.aws.ec2_kafka up --with-deps
+
+kafka-run:
+	$(PY) -m infra.aws.ec2_kafka run --limit 20000
+
+kafka-status:
+	$(PY) -m infra.aws.ec2_kafka status
+
+kafka-down:
+	$(PY) -m infra.aws.ec2_kafka down
+
+
 # Kafka est auto-hébergé (MSK refusé : kafka:* -> AccessDenied) ; Firehose fait
 # le tamponnage 60 s / 5 Mo, la compression gzip et le rangement sous raw/sales/.
 aws-firehose-up:

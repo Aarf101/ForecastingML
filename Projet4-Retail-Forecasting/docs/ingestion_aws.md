@@ -54,14 +54,18 @@ assuré par le service, ce qui est bien le comportement décrit par la diapositi
 ## 3. Commandes
 
 ```bash
-# 1. le delivery stream (idempotent)
-make aws-firehose-up          # python -m infra.aws.firehose_direct up
-make aws-firehose-status
+# tout en un : instance + Kafka + dépendances + producteur + pont (≈7 min)
+make kafka-all
 
-# 2. sur l'EC2 qui héberge Kafka (Session Manager)
-cd /opt/retail
-export PYTHONPATH=/opt/retail/src S3_BUCKET=... AWS_REGION=us-east-1
-python3 -m retail_forecast.ingest.kafka_to_firehose --max-messages 20000
+# ou étape par étape
+make kafka-up        # EC2 + Kafka, puis pip + dépôt dans /opt/retail
+make kafka-run       # producteur 20 000 + pont vers Firehose
+make kafka-status    # IP privée + état du conteneur
+make kafka-down      # supprime l'instance et le SG
+
+# 1. le delivery stream (idempotent)
+make aws-firehose-up
+make aws-firehose-status
 
 # 3. attendre ~60 s (tampon Firehose), puis vérifier
 aws s3 ls --recursive s3://$S3_BUCKET/raw/sales/
@@ -73,8 +77,10 @@ make aws-pipeline-run     # ou l'onglet Run du job Glue
 make aws-firehose-down
 ```
 
-Sur l'EC2, la variable `SAGEMAKER_ROLE_ARN` n'est pas nécessaire :
-`firehose_direct._role()` retombe sur `LabRole` du compte courant.
+`make kafka-all` n'ouvre **aucun port** : les commandes sont exécutées sur
+l'instance via **SSM** (`run_script`), donc ni SSH ni clé. Sur l'EC2, la variable
+`SAGEMAKER_ROLE_ARN` n'est pas nécessaire — `firehose_direct._role()` retombe sur
+`LabRole` du compte courant.
 
 ## 4. Points de conception
 
