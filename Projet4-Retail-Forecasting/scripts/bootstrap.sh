@@ -27,7 +27,7 @@ export AWS_REGION="$REGION"
 echo "== récupération du code depuis $TARBALL =="
 mkdir -p "$WORK"
 aws s3 cp "$TARBALL" /tmp/repo.tar.gz
-tar xzf /tmp/repo.tar.gz -C "$WORK" --strip-components=1
+tar xzf /tmp/repo.tar.gz -C "$WORK"
 cd "$WORK"
 echo "code extrait dans $WORK"
 

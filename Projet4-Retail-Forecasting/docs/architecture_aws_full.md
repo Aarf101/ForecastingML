@@ -157,7 +157,7 @@ l'instance, plus besoin du poste :
 
 ```bash
 aws s3 cp s3://retail-forecast-654654161593-ayoub/code/repo.tar.gz /tmp/repo.tar.gz
-mkdir -p ~/retail && tar xzf /tmp/repo.tar.gz -C ~/retail --strip-components=1
+mkdir -p ~/retail && tar xzf /tmp/repo.tar.gz -C ~/retail
 cd ~/retail && pip install -q -e . -r requirements.txt
 python -m infra.aws.full_run
 ```
@@ -194,7 +194,7 @@ CloudShell a Python 3 + boto3 et hérite des droits de la session :
 
 ```bash
 aws s3 cp s3://$BUCKET/code/repo.tar.gz /tmp/r.tgz
-mkdir -p ~/r && tar xzf /tmp/r.tgz -C ~/r --strip-components=1
+mkdir -p ~/r && tar xzf /tmp/r.tgz -C ~/r
 cd ~/r && pip install -q -e . && python -m infra.aws.full_run --skip-ingest
 ```
 

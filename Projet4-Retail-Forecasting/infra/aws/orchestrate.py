@@ -92,6 +92,9 @@ def definition(role: str, lambda_arn: str) -> dict:
                     }
                 ],
                 "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Echec"}],
+                # ResultPath null : le résultat du job Glue ne remplace pas l'entrée,
+                # sinon ``$.run_id`` disparaît pour les états suivants.
+                "ResultPath": None,
                 "Next": "TrainModel",
             },
             "TrainModel": {
@@ -144,6 +147,9 @@ def definition(role: str, lambda_arn: str) -> dict:
                     }
                 ],
                 "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Echec"}],
+                # Idem : le job d'entraînement renvoie un gros objet ; on garde
+                # l'entrée intacte pour ``GateWAPE`` qui a besoin de ``$.run_id``.
+                "ResultPath": None,
                 "Next": "GateWAPE",
             },
             "GateWAPE": {
