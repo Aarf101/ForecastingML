@@ -73,7 +73,8 @@ tests/ test_metrics, test_features, test_ingest, test_simulate
 
 - ✅ Phase 0 squelette · ✅ Phase 1 données · ✅ Phase 2 features + modèle
   (WAPE **0.430** vs baseline **0.568**, soit −24,3 %)
-- ✅ Phase 3 ingestion Kafka → micro-lots gzip → S3 (validée de bout en bout)
+- ✅ Phase 3 ingestion Kafka → **Firehose DirectPut** → S3 (validée de bout en bout dans AWS :
+  20 000 messages, objet Firehose de 164 Ko, 20 000 lignes JSON valides)
 - ✅ Phase 3b ETL `raw/` → `curated/` Parquet (dédup + typage)
 - ✅ Phase 4a Training Job SageMaker (`ml.m5.large`, 2,7 min, ~0,005 €) :
   WAPE **0.4298** vs baseline 0.5683 côté cloud — identique au local (0.4291)
@@ -94,7 +95,9 @@ tests/ test_metrics, test_features, test_ingest, test_simulate
    et `architecture_inference.*` pour cette raison.
 2. **s3mock** remplace MinIO (MinIO retiré de Docker Hub, LocalStack 2026 exige un
    token payant). Même code boto3 : sur AWS on laisse `S3_ENDPOINT_URL=` vide.
-3. **Redpanda** remplace MSK en local (API Kafka identique). Sur AWS : MSK ou Kinesis.
+3. **Kafka open-source sur EC2** remplace MSK sur AWS (MSK refusé : `kafka:ListClustersV2`
+   → AccessDenied) ; **Firehose DirectPut** assure la livraison, via un pont
+   `ingest/kafka_to_firehose.py`. En local : Redpanda + s3mock.
 4. **Streamlit** remplace QuickSight. **Ollama / JumpStart** remplacent Bedrock.
    Le PDF autorise explicitement ces substitutions (slides 10-11).
 5. Horizon configuré à 28 jours (`FORECAST_HORIZON`) ; les diapositives parlent

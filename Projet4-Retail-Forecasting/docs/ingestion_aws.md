@@ -95,6 +95,22 @@ Sur l'EC2, la variable `SAGEMAKER_ROLE_ARN` n'est pas nécessaire :
 | Firehose DirectPut | 0,029 $/Go | ~0,0003 $ |
 | EC2 `t3.medium` (Kafka) | 0,0416 $/h | 0,04 $ pour une session d'une heure |
 
+## 6. Résultat vérifié (session du 11/11)
+
+| Étape | Mesure |
+|---|---|
+| Kafka | `sales.events`, 3 partitions, offsets `6779 + 6640 + 6581` = **20 000** |
+| Producteur (EC2) | 20 000 messages en **3,9 s** |
+| Pont → Firehose | **20 000/20 000** acceptés, **40** `PutRecordBatch`, **0 reprise** |
+| Objet S3 | `raw/sales/2026/11/11/22/retail-sales-direct-1-2026-11-11-22-21-03-…gz`, 164 Ko |
+| Contenu | **20 000 lignes / 20 000 JSON valides** |
+| Glue | `SUCCEEDED` en 68 s |
+| `curated/sales/` | 4 Parquet · **876 000 lignes** · **876 000 clés distinctes** |
+
+Les 20 000 événements du flux dupliquent l'historique : Glue les supprime
+(896 000 → 876 000). Cette égalité prouve que les deux branches — flux Kafka et
+historique — arrivent bien dans le même `curated/`.
+
 ---
 
 # A. Kinesis → Firehose (variante d'origine)

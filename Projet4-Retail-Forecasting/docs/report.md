@@ -75,6 +75,22 @@ sur une seule ligne, illisible pour Spark (erreur rencontrée puis corrigée, §
 Le commit Kafka a lieu **après** l'accusé Firehose, ce qui garantit au moins une
 livraison (at-least-once) : au pire un lot est réécrit, jamais perdu.
 
+Résultat mesuré (session du 11/11, compte `654654161593`) :
+
+| Étape | Mesure |
+|---|---|
+| Kafka | offsets `6779 + 6640 + 6581` = **20 000** messages, topic 3 partitions |
+| Producteur | 20 000 messages en **3,9 s** (~7 000 msg/s) |
+| Pont → Firehose | **20 000/20 000** acceptés, 40 requêtes `PutRecordBatch`, **0 reprise** |
+| Objet livré par Firehose | `raw/sales/2026/11/11/22/retail-sales-direct-1-…gz` — 164 Ko |
+| Contenu | **20 000 lignes**, **20 000 JSON valides** (délimiteur `\n` présent) |
+| Glue | `SUCCEEDED` en 68 s |
+| `curated/sales/` | 4 fichiers Parquet · **876 000 lignes** · **876 000 clés distinctes** · 1 200 séries |
+
+Les 20 000 événements du flux étant des doublons de l'historique, la déduplication
+les fait disparaître : 896 000 lignes en entrée, 876 000 en sortie. C'est la preuve
+que la chaîne Kafka → Firehose → S3 → Glue est connectée de bout en bout.
+
 ### 2.3 ETL `raw/` → `curated/`
 
 Trois règles, identiques à celles qu'appliquerait un job Glue :
