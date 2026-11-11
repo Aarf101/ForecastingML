@@ -33,6 +33,7 @@ Toujours utiliser `.venv/bin/python` (`python3` système n'a ni lightgbm ni kafk
 src/retail_forecast/
   config.py            SETTINGS figé depuis .env — SEUL endroit qui lit os.environ
   data/simulate.py     générateur de ventes (876k lignes, 20 magasins × 60 articles × 2 ans)
+  data/load.py         charge un dataset quelconque (CSV/Parquet/JSON, local ou S3) -> schéma canonique
   features/build.py    lags 1→35, rolling mean/std 7/14/28, calendrier, time_split()
   evaluate/metrics.py  WAPE, MAPE, RMSE, pinball loss
   train/train_lgbm.py  miroir local du Training Job SageMaker + baseline saisonnière

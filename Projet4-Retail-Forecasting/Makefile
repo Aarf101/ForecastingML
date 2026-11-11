@@ -2,6 +2,7 @@
         produce consume e2e slides lettre dashboard clean aws-setup etl \
         aws-firehose-up aws-firehose-status aws-firehose-down ingest-firehose \
         kafka-all kafka-up kafka-run kafka-status kafka-down \
+        dataset-info ingest-dataset \
         sagemaker-train
 
 # --- Détection de l'OS -------------------------------------------------------
@@ -32,6 +33,8 @@ help:
 	@echo "make aws-ingest-up    cree Kinesis + Firehose + Lambda (ingestion 100% AWS)"
 	@echo "make aws-ingest-run   rejoue le dataset dans Kinesis (via Lambda)"
 	@echo "make aws-ingest-status etat Kinesis/Firehose/Lambda + objets raw/sales/"
+	@echo "make dataset-info  inspecte un dataset quelconque (SOURCE=...)"
+	@echo "make ingest-dataset convertit un dataset vers S3 (SOURCE=... DEST=...)"
 	@echo "make kafka-all    EC2 + Kafka + deps + producteur + pont Firehose (7 min)"
 	@echo "make kafka-up     cree l'EC2 Kafka et installe pip + le depot"
 	@echo "make kafka-run    rejoue 20 000 ventes et pousse vers Firehose"
@@ -161,6 +164,17 @@ etl:
 # --- ingestion 100 % AWS : Kinesis -> Firehose -> S3 raw/sales/ ---------------
 aws-ingest-prep:
 	$(PY) scripts/prepare_replay_chunks.py --rows 20000 --delete
+
+# --- n'importe quel jeu de données -> schéma du projet ------------------------
+# make ingest-dataset SOURCE=data/raw/m5.csv DEST=s3://$S3_BUCKET/raw/historique/m5.parquet
+SOURCE ?=
+DEST   ?=
+
+dataset-info:
+	$(PY) -m retail_forecast.data.load --source "$(SOURCE)"
+
+ingest-dataset:
+	$(PY) -m retail_forecast.data.load --source "$(SOURCE)" --out "$(DEST)"
 
 # --- Kafka sur EC2 : tout en un (instance + deps + producteur + pont) ---------
 kafka-all:

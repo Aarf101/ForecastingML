@@ -15,6 +15,58 @@ Deux variantes sont implémentées. **La variante B est celle qui suit le schém
 | Modules | `infra/aws/kinesis_ingest.py` | `infra/aws/firehose_direct.py` + `kafka_to_firehose.py` |
 | Coût | 0,015 $/h | 0,04 $/h (EC2) |
 
+## 0. Charger n'importe quel jeu de données
+
+Le pipeline n'est pas marié au simulateur : `data/load.py` ramène **n'importe
+quelle source** au schéma attendu (`date, store_id, item_id, units, unit_price,
+promo, is_holiday, lead_time_days, stock_on_hand, stockout, category`).
+
+| Entrée acceptée | Détail |
+|---|---|
+Formats | CSV, CSV gzip, Parquet, JSON, JSON Lines |
+Origines | fichier local **ou** `s3://bucket/key` |
+Colonnes | renommage automatique par alias (`store_nbr`→`store_id`, `sales`→`units`, `ds`→`date`, `onpromotion`→`promo`, `sell_price`→`unit_price`, …) ou `--mapping` explicite |
+
+```bash
+# inspecter sans rien écrire
+make dataset-info SOURCE=data/raw/m5.csv
+
+# convertir et déposer dans S3 (prêt pour l'ingestion)
+make ingest-dataset SOURCE=data/raw/m5.csv \
+     DEST=s3://retail-forecast-654654161593-ayoub/raw/historique/m5.parquet
+
+# ou directement depuis une URI S3, avec mapping manuel
+python -m retail_forecast.data.load \
+  --source s3://bucket/raw/m5_sales.csv \
+  --mapping "Store=store_id,Item=item_id,Qty=units" \
+  --out s3://bucket/raw/historique/sales.parquet
+```
+
+Puis l'ingestion est identique — `producer.py` accepte aussi une URI S3 :
+
+```bash
+python -m retail_forecast.ingest.producer \
+  --data s3://bucket/raw/historique/m5.parquet --limit 20000 --shuffle
+```
+
+`--shuffle` mélange avant `--limit` : sans lui, `--limit 20000` prend le début du
+fichier trié par `(store_id, item_id, date)`, donc **un seul magasin** (S01 et
+28 articles sur le jeu synthétique).
+
+Exemple mesuré sur un CSV type M5 (`Date, Store, Item, Sales, onpromotion,
+sell_price`) :
+
+```
+[load] 60 lignes · 6 colonnes
+[load] schéma canonique appliqué
+lignes    : 60
+période   : 2024-01-01 -> 2024-01-10
+magasins  : 3
+articles  : 2
+séries    : 6
+ventes    : 589 unités
+```
+
 ---
 
 # B. Kafka → Firehose (DirectPut) → S3 → Glue — la chaîne du schéma

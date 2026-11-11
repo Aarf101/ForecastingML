@@ -19,6 +19,7 @@ from pathlib import Path
 import pandas as pd
 
 from retail_forecast.config import SETTINGS
+from retail_forecast.data.load import CANONICAL, load_dataset
 
 RECORD_FIELDS = (
     "date",
@@ -138,22 +139,53 @@ def produce(
     return sent
 
 
+def read_source(source: str) -> pd.DataFrame:
+    """Lit un dataset local ou S3 et garantit le schéma canonique.
+
+    - Parquet local déjà au schéma du projet : lu tel quel (chemin rapide).
+    - Tout le reste (CSV, JSON, gzip, ``s3://…``) : passé par
+      ``data.load.load_dataset`` (alias de colonnes, valeurs par défaut, typage).
+    """
+    if source.startswith("s3://"):
+        return load_dataset(source)
+
+    path = Path(source)
+    if not path.exists():
+        raise SystemExit(
+            f"{path} introuvable — lancez : python -m retail_forecast.data.simulate"
+        )
+    if path.suffix in {".parquet", ".pq"}:
+        df = pd.read_parquet(path)
+        if set(CANONICAL) <= set(df.columns):
+            return df
+    return load_dataset(source)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Rejoue les ventes dans Kafka.")
-    parser.add_argument("--data", default="data/raw/sales.parquet")
+    parser.add_argument(
+        "--data",
+        default="data/raw/sales.parquet",
+        help="fichier local ou s3://… (CSV, Parquet, JSON, gzip)",
+    )
     parser.add_argument("--topic", default=SETTINGS.kafka_topic)
     parser.add_argument("--bootstrap", default=SETTINGS.kafka_bootstrap)
     parser.add_argument("--limit", type=int, default=None, help="nb max de lignes")
     parser.add_argument("--rate", type=float, default=None, help="messages/seconde")
     parser.add_argument("--loop", action="store_true", help="rejouer en boucle")
+    parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        help="mélanger avant --limit (évite de n'envoyer qu'un seul magasin)",
+    )
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
 
-    path = Path(args.data)
-    if not path.exists():
-        raise SystemExit(
-            f"{path} introuvable — lancez : python -m retail_forecast.data.simulate"
-        )
-    df = pd.read_parquet(path) if path.suffix in {".parquet", ".pq"} else pd.read_csv(path)
+    df = read_source(args.data)
+    if args.shuffle:
+        df = df.sample(frac=1.0, random_state=args.seed).reset_index(drop=True)
+        print(f"[producer] ordre mélangé (seed={args.seed})")
+
     produce(
         df,
         topic=args.topic,
