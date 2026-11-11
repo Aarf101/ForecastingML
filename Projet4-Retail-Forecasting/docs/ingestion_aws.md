@@ -1,8 +1,107 @@
-# Ingestion 100 % AWS — Kinesis → Firehose → S3 → Glue
+# Ingestion dans AWS — deux chaînes, et laquelle suit le schéma
 
-Cette note décrit la chaîne d'ingestion **entièrement exécutée dans le compte
-AWS**, sans broker ni producteur sur la machine locale. Elle remplace la version
-de démonstration `Redpanda + to_s3.py`.
+Le sujet (diapositive 11) demande « **MSK ou Kafka open-source** » comme transport
+et « **Lambda / Glue / Firehose** » pour la livraison. MSK est refusé par ce
+compte (`kafka:ListClustersV2` → `AccessDeniedException`), donc le transport est
+**Kafka open-source**, autorisé explicitement.
+
+Deux variantes sont implémentées. **La variante B est celle qui suit le schéma.**
+
+| | A. Kinesis → Firehose | **B. Kafka → Firehose** |
+|---|---|---|
+| Transport | Kinesis Data Streams | **Apache Kafka (EC2, compte AWS)** |
+| Livraison | Firehose (`KinesisStreamAsSource`) | **Firehose (`DirectPut`)** |
+| Fidèle à la diapo | ✗ pas de Kafka | ✓ Kafka **et** Firehose |
+| Modules | `infra/aws/kinesis_ingest.py` | `infra/aws/firehose_direct.py` + `kafka_to_firehose.py` |
+| Coût | 0,015 $/h | 0,04 $/h (EC2) |
+
+---
+
+# B. Kafka → Firehose (DirectPut) → S3 → Glue — la chaîne du schéma
+
+## 1. La chaîne
+
+```
+producteur (sur l'EC2)                     20 000 ventes, 1 événement = 1 ligne JSON
+        │
+        ▼
+Apache Kafka  sales.events                 3 partitions, KRaft, dans le compte
+        │
+        ▼
+pont kafka_to_firehose                     PutRecordBatch, 500 max par requête
+        │                                  chaque enregistrement se termine par \n
+        ▼
+Firehose  retail-sales-direct              DirectPut · tampon 60 s / 5 Mo · GZIP
+        │
+        ▼
+s3://bucket/raw/sales/AAAA/MM/JJ/HH/*.gz  objets livrés par Firehose
+        │
+        ▼
+Job Glue  retail-etl-raw-to-curated        union des lots + historique, dédup
+        │
+        ▼
+s3://bucket/curated/sales/                 Parquet snappy
+```
+
+## 2. Pourquoi un pont, et pas une source Firehose « Kafka »
+
+Firehose n'accepte que quatre familles de sources : **DirectPut, Kinesis, MSK,
+Splunk**. Un Kafka auto-hébergé n'en fait pas partie. Avec MSK, Firehose
+s'abonnerait nativement au cluster ; sans MSK, le `PutRecordBatch` est fait par
+le pont. Le reste — tamponnage, compression, nommage, préfixe d'erreur — reste
+assuré par le service, ce qui est bien le comportement décrit par la diapositive.
+
+## 3. Commandes
+
+```bash
+# 1. le delivery stream (idempotent)
+make aws-firehose-up          # python -m infra.aws.firehose_direct up
+make aws-firehose-status
+
+# 2. sur l'EC2 qui héberge Kafka (Session Manager)
+cd /opt/retail
+export PYTHONPATH=/opt/retail/src S3_BUCKET=... AWS_REGION=us-east-1
+python3 -m retail_forecast.ingest.kafka_to_firehose --max-messages 20000
+
+# 3. attendre ~60 s (tampon Firehose), puis vérifier
+aws s3 ls --recursive s3://$S3_BUCKET/raw/sales/
+
+# 4. ETL
+make aws-pipeline-run     # ou l'onglet Run du job Glue
+
+# 5. arrêt
+make aws-firehose-down
+```
+
+Sur l'EC2, la variable `SAGEMAKER_ROLE_ARN` n'est pas nécessaire :
+`firehose_direct._role()` retombe sur `LabRole` du compte courant.
+
+## 4. Points de conception
+
+| Point | Choix | Raison |
+|---|---|---|
+| Délimiteur | `\n` ajouté par le pont | Firehose concatène sans séparateur ; sans lui l'objet devient `{...}{...}` et Spark échoue (`Unable to infer schema`) |
+| Taille de lot | 500 enregistrements / 4 Mio | limites dures de `PutRecordBatch` |
+| Tampon | 5 Mo / 60 s | laissé à Firehose, pas au code |
+| Sémantique | *at-least-once* | commit Kafka **après** l'accusé Firehose → doublon possible, perte impossible |
+| Déduplication | Glue, `(store_id, item_id, date)` | conséquence assumée de l'at-least-once |
+| Erreurs | `raw/_errors/<type>/` | préfixe configuré sur le stream |
+| Enregistrements refusés | jusqu'à 5 reprises, backoff exponentiel | `FailedPutCount` + `RequestResponses` |
+
+## 5. Coût
+
+| Poste | Tarif | Pour 20 000 événements (~8 Mo) |
+|---|---|---|
+| Firehose DirectPut | 0,029 $/Go | ~0,0003 $ |
+| EC2 `t3.medium` (Kafka) | 0,0416 $/h | 0,04 $ pour une session d'une heure |
+
+---
+
+# A. Kinesis → Firehose (variante d'origine)
+
+Conservée pour comparaison : elle montre une source **native** de Firehose
+(`KinesisStreamAsSource`), mais elle n'a pas de Kafka, donc elle s'écarte du
+schéma.
 
 ## 1. La chaîne
 
@@ -20,17 +119,18 @@ s3://bucket/replay/sales/chunk-*.json.gz        (dataset préparé une fois)
    Firehose retail-sales-to-s3                   buffer 60 s / 5 Mo
               │
               ▼
-   s3://bucket/raw/sales/ingest_date=YYYY-MM-DD/<uuid>.gz
+   s3://bucket/raw/sales/AAAA/MM/JJ/HH/<uuid>.gz
               │
               ▼
    Job Glue retail-etl-raw-to-curated            spark.read.json + historique
               │
               ▼
-   s3://bucket/curated/sales_glue/               Parquet snappy
+   s3://bucket/curated/sales/                    Parquet snappy
 ```
 
 Chaque flèche correspond à un service managé : il n'y a **aucun processus** sur le
 poste de travail une fois le déploiement fait.
+
 
 ## 2. Rôle de chaque brique
 
@@ -38,7 +138,7 @@ poste de travail une fois le déploiement fait.
 |---|---|---|
 | **Lambda** `retail-replay-to-kinesis` | `ingest/producer.py` | relit le dataset depuis S3 et publie dans le stream ; checkpoint `(chunk, offset)` dans S3 pour reprendre après interruption |
 | **Kinesis Data Streams** `retail-sales-stream` | Kafka / MSK | transport d'événements, ordre garanti par `PartitionKey` (= `store_id`) |
-| **Firehose** `retail-sales-to-s3` | `ingest/to_s3.py` | bufferise (60 s ou 5 Mo), compresse en gzip, dépose dans `raw/sales/` avec partitionnement dynamique par date |
+| **Firehose** `retail-sales-to-s3` | `ingest/to_s3.py` | bufferise (60 s ou 5 Mo), compresse en gzip, dépose dans `raw/sales/AAAA/MM/JJ/HH/` |
 | **Glue** `retail-etl-raw-to-curated` | `etl/build_curated.py` | lit les lots `.gz` **et** l'historique Parquet, déduplique, type, écrit `curated/sales_glue/` |
 
 ## 3. Commandes
@@ -72,9 +172,12 @@ désormais `raw/sales/`.
 - **Pas de couche Lambda.** Le handler ne dépend que de `gzip`, `json` et `boto3`,
   tous fournis par le runtime `python3.12`. C'est pourquoi le dataset est
   pré-découpé en JSONL : cela évite d'installer `pandas`/`pyarrow` dans un layer.
-- **Partitionnement dynamique Firehose.** `!{timestamp:yyyy-MM-dd}` recrée la
-  convention `ingest_date=…` de la version locale, donc les deux écritures sont
-  interchangeables côté lecteur.
+- **Partitionnement Firehose imposé.** Firehose range sous `AAAA/MM/JJ/HH/`.
+  Le partitionnement dynamique (`!{timestamp:…}`) est **refusé** par cette API
+  (« S3 Prefix should contain Dynamic Partitioning namespaces when Dynamic
+  Partitioning is enabled »), même avec la syntaxe documentée. C'est pourquoi le
+  job Glue active le listing récursif **et** prévoit un glob `*/*/*/*/*` en
+  repli : sans cela Spark ne voit aucun fichier et renvoie 0 ligne.
 - **Firehose nomme ses objets `<uuid>.gz`** (pas `.json.gz`). `build_curated.py`
   accepte désormais les deux extensions ; Spark décompresse d'après le suffixe
   `.gz`.
@@ -104,5 +207,6 @@ désormais `raw/sales/`.
 | Broker sur le poste | oui | **non** |
 | Coût | 0 € | ≈ 0,19 $/démo |
 
-Les deux écrivent au même endroit, avec la même convention de clé, donc l'ETL et
-tout l'aval sont identiques.
+La variante **B** (Kafka sur EC2 + Firehose DirectPut, section du haut) écrit au
+même endroit, avec la même convention de clé : l'ETL et tout l'aval sont
+identiques. Choisir A ou B ne change que le transport.

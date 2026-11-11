@@ -57,13 +57,25 @@ def raw_key(
     return f"{prefix}/ingest_date={ingest_date}/{batch_id}.{ext}"
 
 
+def encode_line(record: dict) -> bytes:
+    """Un enregistrement -> une ligne JSON terminée par ``\\n`` (JSON Lines).
+
+    Le saut de ligne final n'est pas cosmétique : Firehose et Kinesis concatènent
+    les enregistrements sans ajouter de délimiteur. Sans ``\\n``, l'objet livré
+    devient ``{...}{...}{...}`` sur une seule ligne et Spark ne peut plus le lire.
+    """
+    line = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    return line.encode("utf-8") + b"\n"
+
+
+def to_jsonl(records: Iterable[dict]) -> bytes:
+    """Sérialise en JSON Lines non compressé (une ligne par enregistrement)."""
+    return b"".join(encode_line(rec) for rec in records)
+
+
 def to_gzip_jsonl(records: Iterable[dict]) -> bytes:
     """Sérialise des enregistrements en JSON Lines compressé (1 objet = 1 ligne)."""
-    buf = bytearray()
-    for rec in records:
-        buf += json.dumps(rec, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        buf += b"\n"
-    return gzip.compress(bytes(buf), compresslevel=6)
+    return gzip.compress(to_jsonl(records), compresslevel=6)
 
 
 def chunks(items: Iterable, size: int) -> Iterator[list]:

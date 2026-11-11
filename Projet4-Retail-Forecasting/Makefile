@@ -1,5 +1,6 @@
 .PHONY: help setup env up down ps logs data test train train-quick diagram \
         produce consume e2e slides lettre dashboard clean aws-setup etl \
+        aws-firehose-up aws-firehose-status aws-firehose-down ingest-firehose \
         sagemaker-train
 
 # --- Détection de l'OS -------------------------------------------------------
@@ -30,6 +31,8 @@ help:
 	@echo "make aws-ingest-up    cree Kinesis + Firehose + Lambda (ingestion 100% AWS)"
 	@echo "make aws-ingest-run   rejoue le dataset dans Kinesis (via Lambda)"
 	@echo "make aws-ingest-status etat Kinesis/Firehose/Lambda + objets raw/sales/"
+	@echo "make aws-firehose-up  Kafka -> Firehose DirectPut (schema de la diapo)"
+	@echo "make ingest-firehose  pont Kafka -> Firehose (sur l'EC2, dans le compte)"
 	@echo "make aws-ingest-down  supprime Kinesis + Firehose + Lambda"
 	@echo "make aws-pipeline-up  Step Functions + EventBridge (orchestration AWS)"
 	@echo "make aws-pipeline-run execute le pipeline de bout en bout"
@@ -152,6 +155,21 @@ etl:
 # --- ingestion 100 % AWS : Kinesis -> Firehose -> S3 raw/sales/ ---------------
 aws-ingest-prep:
 	$(PY) scripts/prepare_replay_chunks.py --rows 20000 --delete
+
+# --- ingestion fidèle au schéma : Kafka -> Firehose (DirectPut) -> S3 ---------
+# Kafka est auto-hébergé (MSK refusé : kafka:* -> AccessDenied) ; Firehose fait
+# le tamponnage 60 s / 5 Mo, la compression gzip et le rangement sous raw/sales/.
+aws-firehose-up:
+	$(PY) -m infra.aws.firehose_direct up
+
+aws-firehose-status:
+	$(PY) -m infra.aws.firehose_direct status
+
+aws-firehose-down:
+	$(PY) -m infra.aws.firehose_direct down
+
+ingest-firehose:
+	$(PY) -m retail_forecast.ingest.kafka_to_firehose --max-messages 20000
 
 aws-ingest-up:
 	$(PY) -m infra.aws.kinesis_ingest up

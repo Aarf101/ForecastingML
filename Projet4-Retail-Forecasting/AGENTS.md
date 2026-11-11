@@ -39,7 +39,10 @@ src/retail_forecast/
   ingest/storage.py    unique porte boto3 : raw_key(), gzip JSONL, chunking
   ingest/producer.py   rejoue le parquet → Kafka (--limit, --rate, --loop)
   ingest/to_s3.py      consumer micro-lots → S3, commit Kafka APRÈS écriture
+  ingest/kafka_to_firehose.py  pont Kafka → Firehose DirectPut (500/lot, '\n' par record)
   etl/build_curated.py raw/ → curated/ (dédup, typage, Parquet)
+  aws/firehose_direct.py  Firehose DirectPut (up/status/down) — livraison du schéma
+  aws/ec2_kafka.py     Kafka open-source sur EC2 (up/status/down) — MSK refusé
   aws/kinesis_ingest.py ingestion 100 % AWS : Kinesis + Firehose + Lambda (up/run/status/down)
   lambda/replay_to_kinesis.py handler : dataset S3 → Kinesis (lots de 500, checkpoint S3)
   agent/, inference/   vides (Phase 5 / Phase 4)

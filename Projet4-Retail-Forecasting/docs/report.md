@@ -48,20 +48,32 @@ ventes (876 000 lignes, 2 ans)
 ```
 
 Toutes ces étapes ont été exécutées sur AWS, **y compris le job Glue**
-(`retail-etl-raw-to-curated`, §2.3 bis). Seule la brique de **transport** n'est pas
-managée côté cloud : le flux d'événements a été validé avec Kafka open-source
-(Redpanda, en local) et le routage vers S3 est fait par le consumer `to_s3.py`, qui
-reproduit le comportement de Firehose (buffer + flush périodique). Le sujet autorise
+(`retail-etl-raw-to-curated`, §2.3 bis). La brique de **transport** est un Kafka
+open-source **exécuté dans le compte** (EC2 `t3.medium`, `cp-kafka` en mode KRaft),
+puisqu'Amazon MSK est refusé par ce compte (`kafka:ListClustersV2` →
+`AccessDeniedException`, aucune politique n'accorde `kafka:*`). Le sujet autorise
 explicitement « MSK **ou** Kafka open-source » (diapositives 10-11 du déroulement).
+
+La livraison vers S3 est faite par **Firehose** en mode `DirectPut`
+(`retail-sales-direct`) : Firehose n'accepte comme sources que DirectPut, Kinesis,
+MSK ou Splunk, donc un pont (`ingest/kafka_to_firehose.py`) pousse les lots en
+`PutRecordBatch` et le service assure le tamponnage (60 s / 5 Mo), la compression
+gzip et le rangement sous `raw/sales/AAAA/MM/JJ/HH/`. Ce découpage est celui de la
+diapositive 11 : **Kafka transporte, Firehose livre**.
 
 ### 2.2 Ingestion
 
 Deux sources de même schéma : un flux d'événements (ventes rejouées) et un
-historique en masse. Le flux a été validé localement : 2 000 événements publiés
-dans le topic `sales.events`, consommés en micro-lots, écrits en JSON Lines
-compressé dans `raw/sales/ingest_date=…/batch-….json.gz`. Le commit Kafka a lieu
-**après** l'écriture S3, ce qui garantit au moins une livraison (at-least-once) :
-au pire un lot est réécrit, jamais perdu.
+historique en masse.
+
+Le flux : 20 000 événements publiés dans le topic `sales.events` (3 partitions,
+offsets 6 724 + 6 622 + 6 654 = 20 000 vérifiés avec `kafka-get-offsets`), poussés
+par le pont vers Firehose en lots de 500, puis livrés en JSON Lines compressé sous
+`raw/sales/AAAA/MM/JJ/HH/`. Chaque enregistrement est terminé par `\n` : Firehose
+concatène sans délimiteur, et sans ce saut de ligne l'objet devient `{...}{...}`
+sur une seule ligne, illisible pour Spark (erreur rencontrée puis corrigée, §6).
+Le commit Kafka a lieu **après** l'accusé Firehose, ce qui garantit au moins une
+livraison (at-least-once) : au pire un lot est réécrit, jamais perdu.
 
 ### 2.3 ETL `raw/` → `curated/`
 
@@ -140,7 +152,7 @@ et la date d'exécution — on sait donc toujours qui a produit quelle prévisio
 | **Amazon Athena** | base `retail_forecast`, 2 tables externes, 2 KPI | < 0,001 € |
 | **IAM (LabRole)** | rôle d'exécution de tous les jobs | 0 € |
 | **CloudWatch Logs** | journaux des jobs (diagnostic des deux échecs) | 0 € |
-| Kafka (Redpanda, local) | ingestion temps réel, à la place de MSK | 0 € |
+| **Apache Kafka (EC2) + Firehose** | transport + livraison, à la place de MSK | 0,04 €/h |
 | Ollama `qwen2.5:3b` (local) | rapport hebdomadaire, à la place de Bedrock | 0 € |
 | Streamlit (local) | table de bord, à la place de QuickSight | 0 € |
 
@@ -152,7 +164,7 @@ domaine Studio : ce sont les deux postes qui coûtent à l'heure (respectivement
 
 | Brique du sujet | Version déployée | Pourquoi |
 |---|---|---|
-| Amazon MSK | Kafka open-source (Redpanda) en local | MSK est la brique la plus chère et souvent bloquée dans le lab ; l'API est identique |
+| Amazon MSK | **Kafka open-source exécuté dans le compte** (EC2 `t3.medium`, `cp-kafka` KRaft) + **Firehose `DirectPut`** | MSK est refusé par ce compte (`kafka:ListClustersV2` → `AccessDeniedException`) ; le sujet autorise « MSK **ou** Kafka open-source ». Kafka transporte, Firehose livre : les deux briques de la diapositive 11 sont présentes |
 | AWS Glue | **job Glue réellement exécuté** (§2.3 bis) ; ETL Python (boto3) pour l'itération | 0,44 $/DPU-h (minimum 10 min) : le job managé a tourné une fois pour prouver le passage à l'échelle, le pandas reste le défaut pour ne pas payer à chaque itération |
 | Amazon Bedrock | **Endpoint Hugging Face sur SageMaker** (`retail-llm-hf`, serverless, `Qwen2.5-0.5B-Instruct`) | Bedrock est fermé dans le compte : `bedrock:ListFoundationModels` et `bedrock:InvokeModel` renvoient `AccessDeniedException`, et aucune politique du rôle ne mentionne `bedrock`. Le sujet cite « Hugging Face / OpenLLM **sur SageMaker** » |
 | Amazon QuickSight | **Streamlit sur une instance SageMaker** (`retail-forecast-nb`, `ml.t3.medium`, port 8501) | Le sujet cite « Streamlit / Gradio **hébergé sur SageMaker** ». Le domaine Studio est impossible ici : sa création appelle `iam:CreateRole`, refusé par le lab |
@@ -168,7 +180,7 @@ le sujet lui-même.
 |---|---|---|
 | **Bedrock fermé** | `AccessDeniedException` sur `bedrock:ListFoundationModels` (us-east-1 et us-west-2) et sur `bedrock:InvokeModel` ; aucune politique du rôle ne contient `bedrock` | endpoint Hugging Face sur SageMaker |
 | **Studio impossible** | `create-domain` → *« can't create SageMaker execution role … not authorized to perform: iam:CreateRole »* | notebook instance `ml.t3.medium`, même hébergement SageMaker |
-| **MSK non déployé** | coût horaire (2 brokers minimum) et service fréquemment bloqué en lab | Kafka open-source (Redpanda), autorisé par le sujet |
+| **MSK non déployé** | `kafka:ListClustersV2` → `AccessDeniedException` (aucune politique n'accorde `kafka:*`) ; MSK Serverless coûte ~0,75 $/h | Kafka open-source sur EC2 **dans le compte**, autorisé par le sujet, + Firehose `DirectPut` pour la livraison |
 
 Ces trois points sont assumés : ce sont des limites de l'environnement, pas des
 raccourcis de conception — et les trois solutions de repli sont explicitement
@@ -353,9 +365,11 @@ qui se résume à « lire des agrégats et écrire un paragraphe ». Le périmè
    horizon. Le dashboard compense en affichant le coefficient de variation.
 4. **Pas de Model Monitor.** La dérive est surveillée par le dashboard, pas par le
    service managé (facturé à l'heure).
-5. **MSK non déployé** sur AWS : le flux d'événements tourne sur Kafka open-source
-   (Redpanda en local), substitution explicitement autorisée par le sujet ; le rôle
-   de Firehose est tenu par le consumer `to_s3.py` (voir §3.1).
+5. **MSK non déployé** : `kafka:ListClustersV2` est refusé par le compte. Le
+   transport est un Kafka open-source **exécuté sur EC2**, et la livraison est
+   assurée par **Firehose `DirectPut`** — les deux briques de la diapositive sont
+   donc présentes, seule l'intégration native Firehose↔MSK est remplacée par un
+   pont `PutRecordBatch` (voir §3.1 et `docs/ingestion_aws.md`).
 6. **Écart 16 / 28 jours.** Une diapositive annonce 16 jours d'horizon, le code
    tourne sur 28. À trancher avant la soutenance.
 
