@@ -47,11 +47,12 @@ ventes (876 000 lignes, 2 ans)
   → Ollama                brief hebdomadaire → reports/
 ```
 
-Toutes ces étapes ont été exécutées sur AWS. Les briques **MSK/Kafka** et
-**Glue** sont les deux seules non déployées côté cloud : elles sont remplacées par
-Kafka open-source (Redpanda, en local) et par le même ETL exécuté en Python. Le
-sujet autorise explicitement « Kafka open-source » et « Lambda / Glue » comme
-alternatives (diapositives 10-11 du déroulement).
+Toutes ces étapes ont été exécutées sur AWS, **y compris le job Glue**
+(`retail-etl-raw-to-curated`, §2.3 bis). Seule la brique de **transport** n'est pas
+managée côté cloud : le flux d'événements a été validé avec Kafka open-source
+(Redpanda, en local) et le routage vers S3 est fait par le consumer `to_s3.py`, qui
+reproduit le comportement de Firehose (buffer + flush périodique). Le sujet autorise
+explicitement « MSK **ou** Kafka open-source » (diapositives 10-11 du déroulement).
 
 ### 2.2 Ingestion
 
@@ -97,6 +98,18 @@ Les deux sorties sont conservées : `curated/sales/` alimente le Training Job
 SageMaker lit un préfixe (`S3Prefix`), donc il accepterait indifféremment l'un ou
 l'autre — c'est le point à mentionner si on demande « pourquoi deux dossiers ».
 
+Depuis la révision du script, le job lit **les deux sources** : les micro-lots gzip
+JSONL produits par le consumer Kafka (`raw/sales/`, un fichier par flush de 500
+événements) **et** le Parquet historique (`raw/historique/`). Les deux sont projetés
+sur un schéma commun puis unis avant nettoyage : c'est ce qui rend la chaîne
+`Kafka → S3 → Glue` continue, au lieu d'un job Glue qui ne consommait que
+l'historique. La déduplication utilise `row_number()` partitionné par
+`(store_id, item_id, date)` et ordonné par `event_time` décroissant, donc « la
+dernière réception gagne » est déterministe (`dropDuplicates()` ne garantit pas
+quelle ligne est conservée). La cible est paramétrable via `--TARGET` (défaut
+`curated/sales_glue/`) pour ne pas écraser le Parquet déjà utilisé par le Training
+Job.
+
 ### 2.4 Entraînement
 
 Voir §4. Le script tourne **dans** le conteneur SageMaker, avec le même paquet
@@ -140,7 +153,7 @@ domaine Studio : ce sont les deux postes qui coûtent à l'heure (respectivement
 | Brique du sujet | Version déployée | Pourquoi |
 |---|---|---|
 | Amazon MSK | Kafka open-source (Redpanda) en local | MSK est la brique la plus chère et souvent bloquée dans le lab ; l'API est identique |
-| AWS Glue | ETL Python (boto3) sur S3 | 0,44 $/DPU-h pour la même logique ; le sujet cite « Lambda / Glue » |
+| AWS Glue | **job Glue réellement exécuté** (§2.3 bis) ; ETL Python (boto3) pour l'itération | 0,44 $/DPU-h (minimum 10 min) : le job managé a tourné une fois pour prouver le passage à l'échelle, le pandas reste le défaut pour ne pas payer à chaque itération |
 | Amazon Bedrock | **Endpoint Hugging Face sur SageMaker** (`retail-llm-hf`, serverless, `Qwen2.5-0.5B-Instruct`) | Bedrock est fermé dans le compte : `bedrock:ListFoundationModels` et `bedrock:InvokeModel` renvoient `AccessDeniedException`, et aucune politique du rôle ne mentionne `bedrock`. Le sujet cite « Hugging Face / OpenLLM **sur SageMaker** » |
 | Amazon QuickSight | **Streamlit sur une instance SageMaker** (`retail-forecast-nb`, `ml.t3.medium`, port 8501) | Le sujet cite « Streamlit / Gradio **hébergé sur SageMaker** ». Le domaine Studio est impossible ici : sa création appelle `iam:CreateRole`, refusé par le lab |
 | Glue Crawler | DDL Athena | Un crawler est facturé au DPU, le DDL est gratuit et reproductible |
@@ -340,7 +353,9 @@ qui se résume à « lire des agrégats et écrire un paragraphe ». Le périmè
    horizon. Le dashboard compense en affichant le coefficient de variation.
 4. **Pas de Model Monitor.** La dérive est surveillée par le dashboard, pas par le
    service managé (facturé à l'heure).
-5. **MSK et Glue non déployés** sur AWS (voir §3.1).
+5. **MSK non déployé** sur AWS : le flux d'événements tourne sur Kafka open-source
+   (Redpanda en local), substitution explicitement autorisée par le sujet ; le rôle
+   de Firehose est tenu par le consumer `to_s3.py` (voir §3.1).
 6. **Écart 16 / 28 jours.** Une diapositive annonce 16 jours d'horizon, le code
    tourne sur 28. À trancher avant la soutenance.
 
