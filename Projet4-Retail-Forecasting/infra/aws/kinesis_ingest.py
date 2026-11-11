@@ -227,11 +227,14 @@ def status(c: dict) -> None:
 
     paginator = c["s3"].get_paginator("list_objects_v2")
     count = size = 0
-    for page in paginator.paginate(Bucket=SETTINGS.bucket, Prefix="raw/sales/"):
-        for obj in page.get("Contents", []):
-            count += 1
-            size += obj["Size"]
-    print(f"raw/sales/: {count} objet(s) · {size / 1024:.1f} Ko")
+    try:
+        for page in paginator.paginate(Bucket=SETTINGS.bucket, Prefix="raw/sales/"):
+            for obj in page.get("Contents", []):
+                count += 1
+                size += obj["Size"]
+        print(f"raw/sales/: {count} objet(s) · {size / 1024:.1f} Ko")
+    except Exception as exc:  # noqa: BLE001
+        print(f"raw/sales/: illisible ({str(exc).splitlines()[0][:60]})")
 
 
 def down(c: dict) -> None:
