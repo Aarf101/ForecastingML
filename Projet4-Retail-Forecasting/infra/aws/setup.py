@@ -117,11 +117,14 @@ def inventory() -> None:
     s3 = _s3()
     paginator = s3.get_paginator("list_objects_v2")
     total = size = 0
-    for page in paginator.paginate(Bucket=SETTINGS.bucket):
-        for obj in page.get("Contents", []):
-            total += 1
-            size += obj["Size"]
-    print(f"s3       : {total} objet(s) · {size / 1e6:.2f} Mo")
+    try:
+        for page in paginator.paginate(Bucket=SETTINGS.bucket):
+            for obj in page.get("Contents", []):
+                total += 1
+                size += obj["Size"]
+        print(f"s3       : {total} objet(s) · {size / 1e6:.2f} Mo")
+    except Exception as exc:  # noqa: BLE001
+        print(f"s3       : illisible ({str(exc).splitlines()[0][:70]})")
     try:
         sm = boto3.client("sagemaker", region_name=REGION)
         groups = sm.list_model_package_groups().get("ModelPackageGroupSummaryList", [])
