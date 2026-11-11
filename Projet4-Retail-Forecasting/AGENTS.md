@@ -40,6 +40,8 @@ src/retail_forecast/
   ingest/producer.py   rejoue le parquet → Kafka (--limit, --rate, --loop)
   ingest/to_s3.py      consumer micro-lots → S3, commit Kafka APRÈS écriture
   etl/build_curated.py raw/ → curated/ (dédup, typage, Parquet)
+  aws/kinesis_ingest.py ingestion 100 % AWS : Kinesis + Firehose + Lambda (up/run/status/down)
+  lambda/replay_to_kinesis.py handler : dataset S3 → Kinesis (lots de 500, checkpoint S3)
   agent/, inference/   vides (Phase 5 / Phase 4)
 infra/sagemaker/
   train_entry.py       script exécuté DANS le conteneur (features + LightGBM)
