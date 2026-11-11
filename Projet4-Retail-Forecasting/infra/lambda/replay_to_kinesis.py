@@ -63,10 +63,17 @@ def _decode(body: bytes) -> list[dict]:
 
 
 def _put_records(stream: str, records: list[dict]) -> int:
-    """Publie un lot en Kinesis ; réessaie une fois les enregistrements en échec."""
+    """Publie un lot en Kinesis ; réessaie une fois les enregistrements en échec.
+
+    Chaque enregistrement est terminé par ``\\n`` : Firehose concatène les
+    enregistrements **tels quels**, donc sans ce séparateur l'objet S3 contient
+    ``{…}{…}`` sur une seule ligne et devient illisible en JSON Lines.
+    """
     entries = [
-        {"Data": json.dumps(r, ensure_ascii=False).encode("utf-8"),
-         "PartitionKey": str(r.get("store_id", "s0"))}
+        {
+            "Data": (json.dumps(r, ensure_ascii=False) + "\n").encode("utf-8"),
+            "PartitionKey": str(r.get("store_id", "s0")),
+        }
         for r in records
     ]
     resp = _kinesis.put_records(StreamName=stream, Records=entries)

@@ -107,10 +107,20 @@ def align(df):
 
 frames = []
 
-# 1. micro-lots du flux Kafka (JSONL gzip : Spark gère le .gz nativement)
+# 1. micro-lots du flux Kafka (JSONL gzip : Spark gère le .gz nativement).
+#    Firehose range les objets sous ``AAAA/MM/JJ/HH/`` : sans listing récursif,
+#    Spark ne voit aucun fichier et renvoie un DataFrame vide (0 ligne).
+spark.conf.set("mapreduce.input.fileinputformat.input.dir.recursive", "true")
+spark.conf.set("spark.hadoop.mapreduce.input.fileinputformat.input.dir.recursive", "true")
+
 if has_objects(batches_path):
     batches = spark.read.schema(struct()).json(batches_path)
     n = batches.count()
+    if n == 0:
+        # Repli si le listing récursif n'est pas honoré par le connecteur S3.
+        print("[glue] listing récursif sans effet -> glob explicite")
+        batches = spark.read.schema(struct()).json(f"{batches_path}*/*/*/*/*")
+        n = batches.count()
     print(f"[glue] lots Kafka lus : {n:,} lignes ({batches_path})")
     if n:
         frames.append(align(batches))
