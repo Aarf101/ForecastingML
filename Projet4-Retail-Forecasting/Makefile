@@ -28,6 +28,8 @@ help:
 	@echo "make aws-full-run     pipeline complet dans AWS (ingestion -> transform -> athena)"
 	@echo "make aws-upload-repo  depose le code dans S3 (pour bootstrap dans le lab)"
 	@echo "make aws-run          idem aws-full-run, en Python pur (sans bash)"
+	@echo "make aws-bootstrap    cree TOUTE l infrastructure (bucket, Kinesis, Glue, Step Functions)"
+	@echo "make aws-inventory    inventaire des ressources presentes"
 	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
 	@echo "make sagemaker-register  enregistre le modele (gate WAPE)"
 	@echo "make sagemaker-transform Batch Transform -> forecast/"
@@ -177,6 +179,12 @@ aws-upload-repo:
 
 aws-run:
 	$(PY) -m infra.aws.full_run $(ARGS)
+
+aws-bootstrap:
+	$(PY) -m infra.aws.setup $(ARGS)
+
+aws-inventory:
+	$(PY) -m infra.aws.setup --inventory
 
 
 sagemaker-train:

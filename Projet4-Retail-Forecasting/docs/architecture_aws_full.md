@@ -102,9 +102,54 @@ preuves du projet.
 | Instance SageMaker (dashboard) | 1 h | 0,05 $ |
 | **Total** | | **≈ 0,24 $** |
 
-## 7. Exécuter depuis l'intérieur du lab (sans `make`, sans poste de travail)
+## 7. Mettre en place et exécuter **depuis l'intérieur du lab**
 
-### 7.1 Terminal d'une instance SageMaker — recommandé
+### 7.0 Le seul aller-retour nécessaire
+
+Le code doit entrer dans AWS **une fois**. Deux façons, au choix :
+
+| Méthode | Comment |
+|---|---|
+| CLI | `make aws-upload-repo` (poste → `s3://…/code/repo.tar.gz`) |
+| **Console seule** | zipper le dépôt, puis **S3 → upload** dans `code/` sous le nom `repo.tar.gz` |
+
+Après cela, plus besoin du poste de travail.
+
+### 7.1 Mise en place complète (`infra.aws.setup`)
+
+Dans le terminal Jupyter de l'instance (ou CloudShell) :
+
+```bash
+bash scripts/bootstrap.sh --setup --run
+```
+
+Ce script, exécuté **dans AWS** :
+
+1. `unset AWS_ACCESS_KEY_ID…` → boto3 utilise le rôle de l'instance ;
+2. exporte `S3_BUCKET` et `AWS_REGION` ;
+3. télécharge `code/repo.tar.gz`, l'extrait dans `~/retail`, `pip install -e .` ;
+4. `python -m infra.aws.setup` — crée **toute** l'infrastructure ;
+5. `python -m infra.aws.full_run` — exécute le pipeline.
+
+`infra.aws.setup` est idempotent et couvre sept étapes :
+
+| Étape | Action |
+|---|---|
+| 1 | bucket S3 (chiffrement AES256, accès public bloqué) |
+| 2 | dataset : génération du jeu synthétique puis dépôt dans `raw/historique/` |
+| 3 | `code/sourcedir.tar.gz` (code d'entraînement) |
+| 4 | job Glue `retail-etl-raw-to-curated` (script poussé dans S3) |
+| 5 | Kinesis `retail-sales-stream` + Firehose `retail-sales-to-s3` + Lambda producteur |
+| 6 | Lambda de gate + state machine `retail-forecast-pipeline` + règle EventBridge |
+| 7 | *(option `--with-llm`)* endpoint serverless `retail-llm-hf` |
+
+```bash
+python -m infra.aws.setup --inventory   # que contient déjà le compte ?
+python -m infra.aws.setup               # crée ce qui manque
+python -m infra.aws.setup --with-llm    # + endpoint LLM
+```
+
+### 7.2 Exécution (`infra.aws.full_run`)
 
 Une fois, depuis le poste de travail : `make aws-upload-repo`
 (dépose `s3://…/code/repo.tar.gz`). Ensuite, **dans le terminal Jupyter** de
