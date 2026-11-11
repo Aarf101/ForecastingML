@@ -21,6 +21,10 @@ help:
 	@echo "make aws-ingest-run   rejoue le dataset dans Kinesis (via Lambda)"
 	@echo "make aws-ingest-status etat Kinesis/Firehose/Lambda + objets raw/sales/"
 	@echo "make aws-ingest-down  supprime Kinesis + Firehose + Lambda"
+	@echo "make aws-pipeline-up  Step Functions + EventBridge (orchestration AWS)"
+	@echo "make aws-pipeline-run execute le pipeline de bout en bout"
+	@echo "make aws-pipeline-status etat machine/regle/executions"
+	@echo "make aws-pipeline-down supprime machine + regle + lambda"
 	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
 	@echo "make sagemaker-register  enregistre le modele (gate WAPE)"
 	@echo "make sagemaker-transform Batch Transform -> forecast/"
@@ -145,6 +149,22 @@ aws-ingest-status:
 
 aws-ingest-down:
 	$(PY) -m infra.aws.kinesis_ingest down
+
+# --- orchestration 100 % AWS : Step Functions + EventBridge ------------------
+aws-pipeline-up:
+	$(PY) -m infra.aws.orchestrate up
+
+aws-pipeline-run:
+	$(PY) -m infra.aws.orchestrate run
+
+aws-pipeline-status:
+	$(PY) -m infra.aws.orchestrate status
+
+aws-pipeline-asl:
+	$(PY) -m infra.aws.orchestrate print
+
+aws-pipeline-down:
+	$(PY) -m infra.aws.orchestrate down
 
 
 sagemaker-train:
