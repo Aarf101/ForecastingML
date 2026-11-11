@@ -1,0 +1,1 @@
+"""Infrastructure AWS pilotée par boto3 (ingestion Kinesis/Firehose)."""

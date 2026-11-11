@@ -16,6 +16,11 @@ help:
 	@echo "make aws-teardown arret de l'endpoint et du notebook (dry-run)"
 	@echo "make aws-teardown-go  idem, en supprimant vraiment"
 	@echo "make etl          raw/ -> curated/ Parquet (miroir local du job Glue)"
+	@echo "make aws-ingest-prep  parquet -> morceaux JSONL gzip dans s3://.../replay/"
+	@echo "make aws-ingest-up    cree Kinesis + Firehose + Lambda (ingestion 100% AWS)"
+	@echo "make aws-ingest-run   rejoue le dataset dans Kinesis (via Lambda)"
+	@echo "make aws-ingest-status etat Kinesis/Firehose/Lambda + objets raw/sales/"
+	@echo "make aws-ingest-down  supprime Kinesis + Firehose + Lambda"
 	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
 	@echo "make sagemaker-register  enregistre le modele (gate WAPE)"
 	@echo "make sagemaker-transform Batch Transform -> forecast/"
@@ -124,6 +129,23 @@ aws-teardown-go:
 
 etl:
 	$(PY) -m retail_forecast.etl.build_curated
+
+# --- ingestion 100 % AWS : Kinesis -> Firehose -> S3 raw/sales/ ---------------
+aws-ingest-prep:
+	$(PY) scripts/prepare_replay_chunks.py --rows 20000 --delete
+
+aws-ingest-up:
+	$(PY) -m infra.aws.kinesis_ingest up
+
+aws-ingest-run:
+	$(PY) -m infra.aws.kinesis_ingest run --max-seconds 600
+
+aws-ingest-status:
+	$(PY) -m infra.aws.kinesis_ingest status
+
+aws-ingest-down:
+	$(PY) -m infra.aws.kinesis_ingest down
+
 
 sagemaker-train:
 	$(PY) -m infra.sagemaker.launch --wait

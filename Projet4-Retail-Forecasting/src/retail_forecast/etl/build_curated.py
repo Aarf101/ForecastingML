@@ -61,7 +61,8 @@ def read_raw_s3(client, bucket: str, prefix: str = "raw") -> pd.DataFrame:
             body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
             if key.endswith((".parquet", ".pq")):
                 frames.append(pd.read_parquet(io.BytesIO(body)))
-            elif key.endswith(".json.gz"):
+            elif key.endswith((".json.gz", ".gz")):
+                # ``.gz`` seul : Firehose nomme ses objets ``<uuid>.gz``.
                 frames.append(_read_jsonl_gz(body))
             else:
                 print(f"[etl] ignoré (format inconnu) : {key}")
