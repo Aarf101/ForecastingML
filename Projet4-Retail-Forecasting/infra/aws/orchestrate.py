@@ -47,6 +47,7 @@ LAMBDA_FILE = Path(__file__).resolve().parents[1] / "lambda" / "register_model.p
 def _clients() -> dict:
     return {
         "sfn": boto3.client("stepfunctions", region_name=REGION),
+        "glue": boto3.client("glue", region_name=REGION),
         "lambda": boto3.client("lambda", region_name=REGION),
         "events": boto3.client("events", region_name=REGION),
         "sts": boto3.client("sts", region_name=REGION),
@@ -349,6 +350,51 @@ def down(c: dict) -> None:
         print(f"[lambda] {FUNCTION} déjà absente")
 
 
+def deploy_glue_job(c: dict, role: str) -> None:
+    """Dépose le script Spark dans S3 et crée (ou met à jour) le job Glue."""
+    from retail_forecast.ingest.storage import s3_client
+
+    spark_script = Path(__file__).resolve().parents[1] / "glue" / "etl_spark.py"
+    key = "code/glue/etl_spark.py"
+    s3_client().put_object(
+        Bucket=SETTINGS.bucket,
+        Key=key,
+        Body=spark_script.read_bytes(),
+        ContentType="text/x-python",
+    )
+    script_location = f"s3://{SETTINGS.bucket}/{key}"
+
+    job = {
+        "Name": GLUE_JOB,
+        "Role": role,
+        "Command": {
+            "Name": "glueetl",
+            "ScriptLocation": script_location,
+            "PythonVersion": "3",
+        },
+        "DefaultArguments": {
+            "--BUCKET": SETTINGS.bucket,
+            "--job-language": "python",
+            "--enable-metrics": "true",
+            "--enable-continuous-cloudwatch-log": "true",
+        },
+        "GlueVersion": "4.0",
+        "WorkerType": "G.1X",
+        "NumberOfWorkers": 2,  # minimum : c'est ce qui fixe le prix (0,15 $/run)
+        "Timeout": 15,
+        "MaxRetries": 0,  # un retry doublerait la facture
+        "ExecutionProperty": {"MaxConcurrentRuns": 1},
+    }
+
+    try:
+        c["glue"].get_job(JobName=GLUE_JOB)
+        c["glue"].update_job(JobName=GLUE_JOB, JobUpdate=job)
+        print(f"[glue] {GLUE_JOB} mis à jour ({script_location})")
+    except c["glue"].exceptions.EntityNotFoundException:
+        c["glue"].create_job(**job)
+        print(f"[glue] {GLUE_JOB} créé ({script_location})")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -374,6 +420,7 @@ def main(argv: list[str] | None = None) -> int:
     role = _role_arn(c)
     if args.action == "up":
         print(f"[init] bucket={SETTINGS.bucket} region={REGION}")
+        deploy_glue_job(c, role)
         lambda_arn = deploy_lambda(c, role)
         machine_arn = deploy_machine(c, role, lambda_arn)
         deploy_rule(c, machine_arn, role, args.schedule)

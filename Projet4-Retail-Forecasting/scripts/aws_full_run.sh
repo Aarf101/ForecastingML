@@ -35,11 +35,6 @@ aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null \
 step "1. dépôt du code d'entraînement dans S3"
 $PY -m infra.sagemaker.launch --upload-only
 
-step "2. vérification du job Glue"
-aws glue get-job --job-name retail-etl-raw-to-curated >/dev/null 2>&1 \
-  || fail "job Glue absent : le créer dans la console avec infra/glue/etl_spark.py (paramètre --BUCKET=$BUCKET)"
-echo "job Glue présent"
-
 if [ "$SKIP_INGEST" -eq 0 ]; then
   step "3. ingestion : morceaux JSONL -> S3"
   $PY scripts/prepare_replay_chunks.py --rows 20000 --delete
@@ -62,8 +57,11 @@ if [ "$SKIP_INGEST" -eq 0 ]; then
 fi
 
 if [ "$SKIP_ORCH" -eq 0 ]; then
-  step "7. orchestration : Step Functions + EventBridge"
+  step "7. orchestration : job Glue + Step Functions + EventBridge"
   $PY -m infra.aws.orchestrate up
+
+  aws glue get-job --job-name retail-etl-raw-to-curated >/dev/null 2>&1 \
+    || fail "job Glue absent après 'orchestrate up'"
 
   step "8. exécution Glue -> Training -> gate WAPE -> Registry"
   $PY -m infra.aws.orchestrate run
