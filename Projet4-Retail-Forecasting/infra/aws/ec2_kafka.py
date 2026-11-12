@@ -181,6 +181,7 @@ def up(instance_type: str = "t3.medium", wait: bool = True) -> dict:
     print(f"[ec2] instance {iid} demandée ({instance_type})")
 
     if wait:
+        print("[ec2] attente de l'état running (≤ 2 min)…", flush=True)
         waiter = c.get_waiter("instance_running")
         waiter.wait(InstanceIds=[iid], WaiterConfig={"Delay": 5, "MaxAttempts": 60})
         desc = c.describe_instances(InstanceIds=[iid])["Reservations"][0]["Instances"][0]
@@ -224,23 +225,30 @@ def _ssm_client():
 def wait_ssm(instance_id: str, tries: int = 40) -> None:
     """Attend que l'agent SSM voie l'instance (obligatoire avant ``send_command``)."""
     ssm = _ssm_client()
-    for _ in range(tries):
+    print("[ssm] attente de l'agent (≤ 200 s)…", flush=True)
+    for attempt in range(1, tries + 1):
         try:
             info = ssm.describe_instance_information(
                 Filters=[{"Key": "InstanceIds", "Values": [instance_id]}]
             )["InstanceInformationList"]
             if info and info[0]["PingStatus"] == "Online":
+                print(f"[ssm] agent Online après {attempt * 5}s", flush=True)
                 return
         except Exception:  # noqa: BLE001 - l'instance démarre encore
             pass
+        if attempt % 4 == 0:
+            print(f"[ssm] toujours en attente… {attempt * 5}s", flush=True)
         time.sleep(5)
     raise RuntimeError(f"{instance_id} n'est pas Online pour SSM")
 
 
-def run_script(instance_id: str, script: str, timeout: int = 900) -> str:
+def run_script(
+    instance_id: str, script: str, timeout: int = 900, label: str = "commande"
+) -> str:
     """Exécute un script bash sur l'instance via SSM et renvoie sa sortie.
 
-    Remplace SSH : aucun port 22 ouvert, aucune clé à gérer.
+    Remplace SSH : aucun port 22 ouvert, aucune clé à gérer. Affiche une ligne de
+    progression toutes les 20 s pour ne jamais paraître bloqué.
     """
     ssm = _ssm_client()
     cmd = ssm.send_command(
@@ -250,6 +258,8 @@ def run_script(instance_id: str, script: str, timeout: int = 900) -> str:
         Parameters={"commands": [script]},
     )["Command"]["CommandId"]
 
+    started = time.monotonic()
+    last_print = 0.0
     for _ in range(max(timeout // 5, 12)):
         res = ssm.get_command_invocation(CommandId=cmd, InstanceId=instance_id)
         if res["Status"] in ("Success", "Failed", "Cancelled", "TimedOut"):
@@ -258,6 +268,11 @@ def run_script(instance_id: str, script: str, timeout: int = 900) -> str:
             if res["Status"] != "Success":
                 raise RuntimeError(f"SSM {res['Status']} : {(err or out)[-800:]}")
             return out
+
+        elapsed = time.monotonic() - started
+        if elapsed - last_print >= 20:
+            last_print = elapsed
+            print(f"[ssm] {label} en cours… {int(elapsed)}s", flush=True)
         time.sleep(5)
     raise RuntimeError("commande SSM toujours en cours après le délai imparti")
 
@@ -280,10 +295,15 @@ echo bootstrap-ok
 def bootstrap(instance_id: str, bucket: str) -> str:
     """Installe Python + dépendances et dépose le dépôt dans ``/opt/retail``."""
     wait_ssm(instance_id)
-    print("[ec2] installation des dépendances (pip + dépôt)…")
-    out = run_script(instance_id, BOOTSTRAP_SCRIPT.replace("__BUCKET__", bucket), timeout=600)
+    print("[ec2] pip install kafka-python boto3 pandas pyarrow + dépôt (2-3 min)…", flush=True)
+    out = run_script(
+        instance_id,
+        BOOTSTRAP_SCRIPT.replace("__BUCKET__", bucket),
+        timeout=600,
+        label="installation des dépendances",
+    )
     ok = "bootstrap-ok" in out
-    print(f"[ec2] dépôt prêt dans /opt/retail {'✅' if ok else '⚠️'}")
+    print(f"[ec2] dépôt prêt dans /opt/retail {'✅' if ok else '⚠️'}", flush=True)
     return out
 
 

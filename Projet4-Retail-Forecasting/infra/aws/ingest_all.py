@@ -72,12 +72,15 @@ def wait_delivery(before: dict[str, int], timeout: int = 300) -> list[tuple[str,
     """Attend qu'un nouvel objet apparaisse sous raw/sales/."""
     print(f"[wait] tampon Firehose (≤ 60 s) puis livraison S3… délai max {timeout}s")
     deadline = time.monotonic() + timeout
+    tick = 0
     while time.monotonic() < deadline:
         new = {k: v for k, v in objects().items() if k not in before}
         if new:
             for key, size in sorted(new.items()):
                 print(f"[s3] {key}  ({size:,} octets)")
             return sorted(new.items())
+        tick += 10
+        print(f"[wait] rien encore… {tick}s (Firehose tamponne 60 s)", flush=True)
         time.sleep(10)
     raise RuntimeError(
         f"aucun objet livré sous {PREFIX} en {timeout}s — voir "
