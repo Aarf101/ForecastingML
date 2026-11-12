@@ -44,13 +44,16 @@ def _client(service: str):
 
 
 def step(num: int, total: int, label: str) -> None:
-    print(f"\n=== {num}/{total} · {label} ===")
+    print(f"\n=== {num}/{total} · {label} ===", flush=True)
 
 
 def check_session() -> str:
     """Vérifie les credentials et le bucket ; renvoie le compte."""
     account = _client("sts").get_caller_identity()["Account"]
-    print(f"[session] compte {account} · région {REGION} · bucket {SETTINGS.bucket or '—'}")
+    print(
+        f"[session] compte {account} · région {REGION} · bucket {SETTINGS.bucket or '—'}",
+        flush=True,
+    )
     if not SETTINGS.bucket:
         raise SystemExit("S3_BUCKET vide : renseigner .env ou exporter la variable")
     return account
@@ -190,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     step(7, total, f"ingestion : {args.limit:,} messages -> Firehose -> S3")
     before = objects()
     if before:
-        print(f"[s3] {len(before)} objet(s) déjà sous {PREFIX} (référence)")
+        print(f"[s3] {len(before)} objet(s) déjà sous {PREFIX} (référence)", flush=True)
     ec2_kafka.run_ingest(instance_id, private_ip, SETTINGS.bucket, args.limit, args.stream)
     delivered = wait_delivery(before, args.delivery_timeout)
 

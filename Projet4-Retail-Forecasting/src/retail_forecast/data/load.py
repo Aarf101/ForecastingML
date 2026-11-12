@@ -134,9 +134,18 @@ def parse_mapping(spec: str | None) -> dict[str, str]:
     return out
 
 
-def normalize(df: pd.DataFrame, mapping: dict[str, str] | None = None) -> pd.DataFrame:
-    """Ramène un DataFrame au schéma canonique (renommage, défauts, typage)."""
+def normalize(
+    df: pd.DataFrame,
+    mapping: dict[str, str] | None = None,
+    constants: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    """Ramène un DataFrame au schéma canonique (renommage, défauts, typage).
+
+    ``constants`` force des colonnes à valeur fixe — utile quand le dataset n'a
+    pas d'identifiant d'article (Rossmann : ``item_id="TOTAL"``).
+    """
     mapping = mapping or {}
+    constants = constants or {}
     rename: dict[str, str] = {}
 
     by_lower = {str(c).lower().strip(): c for c in df.columns}
@@ -155,6 +164,11 @@ def normalize(df: pd.DataFrame, mapping: dict[str, str] | None = None) -> pd.Dat
             rename[src] = dst
 
     out = df.rename(columns=rename)
+
+    # Colonnes constantes : elles rendent le champ obligatoire satisfait même
+    # quand la source ne le fournit pas.
+    for col, value in constants.items():
+        out[col] = value
 
     missing = [c for c in REQUIRED if c not in out.columns]
     if missing:
@@ -185,9 +199,13 @@ def normalize(df: pd.DataFrame, mapping: dict[str, str] | None = None) -> pd.Dat
     return out[CANONICAL]
 
 
-def load_dataset(source: str, mapping: dict[str, str] | None = None) -> pd.DataFrame:
+def load_dataset(
+    source: str,
+    mapping: dict[str, str] | None = None,
+    constants: dict[str, str] | None = None,
+) -> pd.DataFrame:
     """Lecture + normalisation en une étape (utilisé par le producteur)."""
-    return normalize(read_any(source), mapping)
+    return normalize(read_any(source), mapping, constants)
 
 
 def write_any(df: pd.DataFrame, dest: str) -> int:
@@ -229,6 +247,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", required=True, help="fichier local ou s3://…")
     parser.add_argument("--out", default=None, help="parquet de sortie (local ou s3://…)")
     parser.add_argument("--mapping", default=None, help="source=cible,source=cible")
+    parser.add_argument(
+        "--set",
+        dest="constants",
+        default=None,
+        help='colonnes constantes, ex. "item_id=TOTAL" (dataset sans identifiant article)',
+    )
     parser.add_argument("--limit", type=int, default=None, help="nb max de lignes")
     args = parser.parse_args(argv)
 
@@ -236,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[load] {args.source} : {len(raw):,} lignes · {len(raw.columns)} colonnes")
     print(f"[load] colonnes : {list(raw.columns)[:12]}")
 
-    df = normalize(raw, parse_mapping(args.mapping))
+    df = normalize(raw, parse_mapping(args.mapping), parse_mapping(args.constants))
     if args.limit:
         df = df.head(args.limit).reset_index(drop=True)
 

@@ -4,6 +4,7 @@
         kafka-all kafka-up kafka-run kafka-status kafka-down \
         dataset-info ingest-dataset \
         aws-ingest-all aws-ingest-all-down \
+        aws-setup-log aws-setup-tail \
         sagemaker-train
 
 # --- Détection de l'OS -------------------------------------------------------
@@ -182,13 +183,21 @@ ingest-dataset:
 
 # --- ingestion de bout en bout : une seule commande, tout créé ---------------
 aws-ingest-all:
-	$(PY) -m infra.aws.ingest_all
+	$(PY) -u -m infra.aws.ingest_all
 
 aws-setup-only:
-	$(PY) -m infra.aws.ingest_all --setup-only
+	$(PY) -u -m infra.aws.ingest_all --setup-only
+
+# Même chose, mais la sortie est écrite dans /tmp/aws-setup.log ET affichée.
+# Utile quand le terminal appelant bufferise la sortie (pipe au lieu de tty).
+aws-setup-log:
+	$(PY) -u -m infra.aws.ingest_all --setup-only 2>&1 | tee /tmp/aws-setup.log
+
+aws-setup-tail:
+	tail -f /tmp/aws-setup.log
 
 aws-ingest-all-down:
-	$(PY) -m infra.aws.ingest_all --down
+	$(PY) -u -m infra.aws.ingest_all --down
 
 # --- Kafka sur EC2 : tout en un (instance + deps + producteur + pont) ---------
 kafka-all:

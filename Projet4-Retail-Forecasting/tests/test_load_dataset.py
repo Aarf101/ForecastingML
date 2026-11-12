@@ -144,3 +144,27 @@ def test_summary_reports_counts():
     text = load.summary(load.normalize(_raw_m5_like()))
     assert "magasins  : 1" in text
     assert "articles  : 2" in text
+
+
+# --- colonnes constantes (--set) --------------------------------------------
+
+
+def test_constants_satisfy_missing_required_column():
+    """Rossmann n'a pas d'identifiant article : --set item_id=TOTAL le fournit."""
+    df = pd.DataFrame(
+        {
+            "Date": ["2015-07-31", "2015-08-01"],
+            "Store": [1, 1],
+            "Sales": [5263, 6064],
+        }
+    )
+    out = load.normalize(df, {"Date": "date", "Store": "store_id", "Sales": "units"},
+                         {"item_id": "TOTAL"})
+    assert out.item_id.tolist() == ["TOTAL", "TOTAL"]
+    assert out.units.tolist() == [5263, 6064]
+
+
+def test_constants_override_existing_column():
+    out = load.normalize(_raw_m5_like(), constants={"category": "forced"})
+    assert set(out.category) == {"forced"}
+
