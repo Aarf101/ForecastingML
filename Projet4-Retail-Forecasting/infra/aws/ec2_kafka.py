@@ -145,7 +145,7 @@ def _instance(c) -> dict | None:
     return res[0]["Instances"][0] if res else None
 
 
-def up(instance_type: str, wait: bool = True) -> dict:
+def up(instance_type: str = "t3.medium", wait: bool = True) -> dict:
     """Crée le SG puis l'instance ; attend que l'état soit ``running``."""
     c = _ec2()
     subnet_id, vpc_id = _default_network(c)
