@@ -329,6 +329,31 @@ def run_ingest(
     return out
 
 
+def wait_kafka(instance_id: str, tries: int = 30, delay: int = 6) -> str:
+    """Attend que le conteneur Kafka soit ``Up`` sur l'instance.
+
+    Une instance neuve met ~60-90 s (pull de l'image + démarrage KRaft).
+    """
+    last = ""
+    for _ in range(tries):
+        try:
+            out = run_script(
+                instance_id, "docker ps --format '{{.Names}} {{.Status}}'", timeout=120
+            )
+        except RuntimeError as exc:
+            last = str(exc)[:80]
+            time.sleep(delay)
+            continue
+        if "kafka" in out and "Up" in out:
+            line = out.strip().splitlines()[0]
+            print(f"[ec2] Kafka prêt · {line}")
+            return line
+        last = out.strip() or "conteneur absent"
+        print(f"[ec2] Kafka démarre… ({last[:60]})")
+        time.sleep(delay)
+    raise RuntimeError(f"le conteneur Kafka n'est pas passé Up ({last})")
+
+
 def down() -> None:
     """Termine l'instance puis supprime le groupe de sécurité."""
     c = _ec2()

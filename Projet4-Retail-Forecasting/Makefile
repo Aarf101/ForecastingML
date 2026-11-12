@@ -3,6 +3,7 @@
         aws-firehose-up aws-firehose-status aws-firehose-down ingest-firehose \
         kafka-all kafka-up kafka-run kafka-status kafka-down \
         dataset-info ingest-dataset \
+        aws-ingest-all aws-ingest-all-down \
         sagemaker-train
 
 # --- Détection de l'OS -------------------------------------------------------
@@ -33,6 +34,8 @@ help:
 	@echo "make aws-ingest-up    cree Kinesis + Firehose + Lambda (ingestion 100% AWS)"
 	@echo "make aws-ingest-run   rejoue le dataset dans Kinesis (via Lambda)"
 	@echo "make aws-ingest-status etat Kinesis/Firehose/Lambda + objets raw/sales/"
+	@echo "make aws-ingest-all  TOUT : bucket, Firehose, EC2+Kafka, ingestion, Glue"
+	@echo "make aws-ingest-all-down idem puis supprime EC2 + Firehose"
 	@echo "make dataset-info  inspecte un dataset quelconque (SOURCE=...)"
 	@echo "make ingest-dataset convertit un dataset vers S3 (SOURCE=... DEST=...)"
 	@echo "make kafka-all    EC2 + Kafka + deps + producteur + pont Firehose (7 min)"
@@ -175,6 +178,13 @@ dataset-info:
 
 ingest-dataset:
 	$(PY) -m retail_forecast.data.load --source "$(SOURCE)" --out "$(DEST)"
+
+# --- ingestion de bout en bout : une seule commande, tout créé ---------------
+aws-ingest-all:
+	$(PY) -m infra.aws.ingest_all
+
+aws-ingest-all-down:
+	$(PY) -m infra.aws.ingest_all --down
 
 # --- Kafka sur EC2 : tout en un (instance + deps + producteur + pont) ---------
 kafka-all:
