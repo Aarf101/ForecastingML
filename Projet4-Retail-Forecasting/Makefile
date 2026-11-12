@@ -35,6 +35,7 @@ help:
 	@echo "make aws-ingest-run   rejoue le dataset dans Kinesis (via Lambda)"
 	@echo "make aws-ingest-status etat Kinesis/Firehose/Lambda + objets raw/sales/"
 	@echo "make aws-ingest-all  TOUT : bucket, Firehose, EC2+Kafka, ingestion, Glue"
+	@echo "make aws-setup-only  cree l'environnement et s'arrete (test via la console)"
 	@echo "make aws-ingest-all-down idem puis supprime EC2 + Firehose"
 	@echo "make dataset-info  inspecte un dataset quelconque (SOURCE=...)"
 	@echo "make ingest-dataset convertit un dataset vers S3 (SOURCE=... DEST=...)"
@@ -182,6 +183,9 @@ ingest-dataset:
 # --- ingestion de bout en bout : une seule commande, tout créé ---------------
 aws-ingest-all:
 	$(PY) -m infra.aws.ingest_all
+
+aws-setup-only:
+	$(PY) -m infra.aws.ingest_all --setup-only
 
 aws-ingest-all-down:
 	$(PY) -m infra.aws.ingest_all --down

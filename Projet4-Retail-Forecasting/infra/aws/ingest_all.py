@@ -112,6 +112,31 @@ def run_glue(wait: bool = True) -> str:
     raise RuntimeError("job Glue toujours en cours après 20 min")
 
 
+def print_setup_summary(instance_id: str, private_ip: str, stream: str) -> None:
+    """Affiche ce qui a été créé et les commandes/clics à faire ensuite."""
+    print("\n" + "=" * 64)
+    print("ENVIRONNEMENT PRÊT — aucune donnée n'a été envoyée")
+    print("=" * 64)
+    print(f"  bucket      : s3://{SETTINGS.bucket}/")
+    print(f"  dataset     : s3://{SETTINGS.bucket}/raw/historique/sales.parquet")
+    print(f"  Firehose    : {stream} (DirectPut) -> raw/sales/")
+    print(f"  EC2 + Kafka : {instance_id} · {private_ip}:9092 · dépôt dans /opt/retail")
+    print("\nTester sans Kafka, en clics (console) :")
+    print(f"  1. Firehose -> {stream} -> bouton 'Test with demo data' -> Send")
+    print("  2. attendre 60 s -> S3 -> raw/sales/ -> objet AAAA/MM/JJ/HH/*.gz")
+    print("  3. Glue -> retail-etl-raw-to-curated -> Run")
+    print("  4. S3 -> curated/sales/ (4 Parquet) · Athena -> retail_forecast")
+    print("\nTester avec Kafka (terminal du navigateur) :")
+    print("  EC2 -> Connect -> Session Manager -> Connect, puis :")
+    print(f"  cd /opt/retail && export PYTHONPATH=/opt/retail/src \\\n"
+          f"      S3_BUCKET={SETTINGS.bucket} AWS_REGION={REGION}")
+    print(f"  python3 -m retail_forecast.ingest.producer --limit 20000 "
+          f"--bootstrap {private_ip}:9092")
+    print(f"  python3 -m retail_forecast.ingest.kafka_to_firehose --bootstrap "
+          f"{private_ip}:9092 --stream {stream} --max-messages 20000")
+    print("\nNettoyage : python -m infra.aws.ingest_all --down")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Crée tout l'environnement AWS d'ingestion et le teste de bout en bout."
@@ -119,13 +144,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=20000, help="messages à rejouer")
     parser.add_argument("--stream", default=firehose_direct.STREAM)
     parser.add_argument("--skip-glue", action="store_true", help="s'arrêter après S3")
+    parser.add_argument(
+        "--setup-only",
+        action="store_true",
+        help="créer l'environnement et s'arrêter avant l'ingestion (pour tester via la console)",
+    )
     parser.add_argument("--skip-dataset", action="store_true", help="ne pas vérifier le dataset")
     parser.add_argument("--regenerate-data", action="store_true")
     parser.add_argument("--down", action="store_true", help="supprimer EC2 + Firehose à la fin")
     parser.add_argument("--delivery-timeout", type=int, default=300)
     args = parser.parse_args(argv)
 
-    total = 7 if args.skip_glue else 8
+    total = 6 if args.setup_only else (7 if args.skip_glue else 8)
 
     step(1, total, "session et bucket")
     check_session()
@@ -149,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
 
     step(6, total, "attente du conteneur Kafka")
     ec2_kafka.wait_kafka(instance_id)
+
+    if args.setup_only:
+        print_setup_summary(instance_id, private_ip, args.stream)
+        return 0
 
     step(7, total, f"ingestion : {args.limit:,} messages -> Firehose -> S3")
     before = objects()
