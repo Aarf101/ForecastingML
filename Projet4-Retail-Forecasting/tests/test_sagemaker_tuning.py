@@ -167,7 +167,7 @@ def test_boto_session_falls_back_when_profile_missing(monkeypatch):
 
 
 def test_pipeline_definition_graph():
-    """Le graphe du pipeline : train -> eval -> condition -> registre / échec.
+    """Le graphe du pipeline : features -> train -> eval -> condition -> registre.
 
     Les deux téléversements (code d'entraînement, script d'évaluation) sont
     simulés : la définition se construit donc sans AWS.
@@ -197,7 +197,7 @@ def test_pipeline_definition_graph():
         definition = json.loads(pl.build_pipeline(0.45).definition())
 
     assert [s["Name"] for s in definition["Steps"]] == [
-        "TrainLightGBM", "EvaluateModel", "GateWAPE",
+        "PreprocessFeatures", "TrainLightGBM", "EvaluateModel", "GateWAPE",
     ]
     gate = next(s for s in definition["Steps"] if s["Type"] == "Condition")
     assert [b["Name"] for b in gate["Arguments"]["IfSteps"]] == [
@@ -207,3 +207,56 @@ def test_pipeline_definition_graph():
     assert [p["Name"] for p in definition["Parameters"]] == ["WapeThreshold"]
     condition = json.dumps(gate["Arguments"]["Conditions"])
     assert "regression_metrics.test_wape.value" in condition
+
+    # L'entraînement lit les features de l'étape précédente, pas curated/ brut :
+    # c'est ce qui garantit une seule définition des features (pas de skew).
+    train = next(s for s in definition["Steps"] if s["Name"] == "TrainLightGBM")
+    assert train["DependsOn"] == ["PreprocessFeatures"]
+    entree = json.dumps(train["Arguments"].get("InputDataConfig", []))
+    # Le SDK sérialise la propriété soit en {"Get": …} soit en {"Std:Join": …}
+    # selon qu'elle est seule ou concaténée : seul le renvoi à l'étape compte.
+    assert "PreprocessFeatures" in entree and "S3Output.S3Uri" in entree
+    assert "/curated/" not in entree
+
+    # La sortie de l'étape est versionnée par exécution : deux exécutions
+    # concurrentes n'écrasent pas leurs features respectives.
+    pre = next(s for s in definition["Steps"] if s["Name"] == "PreprocessFeatures")
+    sortie = json.dumps(
+        pre["Arguments"]["ProcessingOutputConfig"]["Outputs"][0]["S3Output"]["S3Uri"]
+    )
+    assert "Std:Join" in sortie and "Execution.PipelineExecutionId" in sortie
+
+
+def test_preprocess_entry_writes_feature_table(tmp_path, monkeypatch):
+    """L'étape Preprocess écrit une table de features complète (lags inclus)."""
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+
+    from infra.sagemaker import preprocess_entry as pp
+    from retail_forecast.data.simulate import simulate_sales
+
+    ventes = simulate_sales(n_stores=2, n_items=2, days=50, seed=11)
+    entree = tmp_path / "curated"
+    entree.mkdir()
+    ventes.to_parquet(entree / "part-0.parquet", index=False)
+
+    monkeypatch.setattr(pp, "INPUT", entree)
+    monkeypatch.setattr(pp, "CODE", tmp_path / "code")
+    monkeypatch.setattr(pp, "OUTPUT", tmp_path / "out")
+    # Le paquet est importable dans l'environnement de test : pas besoin du tar.
+    monkeypatch.setattr(pp, "_load_package", lambda: None)
+
+    assert pp.main() == 0
+
+    sortie = pd.read_parquet(tmp_path / "out" / "features" / "features.parquet")
+    assert len(sortie) == len(ventes)          # dropna=False : aucune ligne perdue
+    assert {"lag_1", "lag_7", "lag_35", "roll_mean_7", "roll_std_28"} <= set(sortie.columns)
+    assert sortie["date"].dtype.kind == "M"
+
+    rapport = json.loads(
+        (tmp_path / "out" / "features" / "features.json").read_text()
+    )
+    assert rapport["rows"] == len(ventes)
+    assert rapport["stores"] == 2
+    assert "lag_35" in rapport["feature_columns"]
+

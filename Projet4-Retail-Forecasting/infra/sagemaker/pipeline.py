@@ -1,4 +1,4 @@
-"""SageMaker Pipeline : entraînement -> évaluation -> gate WAPE -> registre.
+"""SageMaker Pipeline : features -> entraînement -> évaluation -> gate -> registre.
 
 Répond au point « Mise en place de SageMaker Pipelines » du sujet. C'est la
 version *managée par SageMaker* de ce que ``infra/aws/orchestrate.py`` fait avec
@@ -7,15 +7,25 @@ en Python, et SageMaker les exécute lui-même.
 
 Le graphe ::
 
+    PreprocessFeatures  (Processing Job : features calculées UNE fois)
+           │  features.parquet -> s3://<bucket>/features/<execution-id>/
+           ▼
     TrainLightGBM  (Training Job, conteneur SKLearn managé)
-          │  model.tar.gz
-          ▼
-    EvaluateModel  (Processing Job, stdlib seulement)
-          │  evaluation.json  -> regression_metrics.test_wape.value
-          ▼
+           │  model.tar.gz
+           ▼
+    EvaluateModel  (Processing Job : recalcule le WAPE sur la fenêtre de test)
+           │  evaluation.json  -> regression_metrics.test_wape.value
+           ▼
     GateWAPE       (ConditionStep)
-          ├── WAPE <= seuil  -> RegisterModel (version Approved)
-          └── WAPE  > seuil  -> FailStep (échec explicite, rien n'est publié)
+           ├── WAPE <= seuil  -> RegisterModel (version Approved)
+           └── WAPE  > seuil  -> FailStep (échec explicite, rien n'est publié)
+
+L'étape ``PreprocessFeatures`` n'est pas décorative : sans elle les features sont
+recalculées par chaque consommateur (conteneur d'entraînement, client de Batch
+Transform, échantillon de l'endpoint). Si l'un d'eux change un paramètre
+(``LAGS``, ``ROLLS``), l'entraînement et l'inférence ne parlent plus le même
+espace de features — c'est le *train/serve skew*. Ici la définition vit à un seul
+endroit, et l'évaluation relit exactement la table de l'entraînement.
 
 Le déploiement (Batch Transform vers ``forecast/``) reste
 ``infra/sagemaker/batch_transform.py`` : il n'a pas besoin d'être un step pour
@@ -55,6 +65,7 @@ from retail_forecast.ingest.storage import s3_client
 PIPELINE_NAME = "retail-forecast-mlops"
 MODEL_GROUP = "retail-forecast-lgbm"
 EVAL_SCRIPT = Path(__file__).with_name("evaluate_entry.py")
+PREPROC_SCRIPT = Path(__file__).with_name("preprocess_entry.py")
 
 
 def _require_sdk():
@@ -132,6 +143,7 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
     from sagemaker.sklearn.estimator import SKLearn
     from sagemaker.workflow.condition_step import ConditionStep
     from sagemaker.workflow.conditions import ConditionLessThanOrEqualTo
+    from sagemaker.workflow.execution_variables import ExecutionVariables
     from sagemaker.workflow.fail_step import FailStep
     from sagemaker.workflow.functions import Join, JsonGet
     from sagemaker.workflow.parameters import ParameterFloat
@@ -151,6 +163,60 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
     code_uri = upload_code(s3_client(), bucket)
 
     seuil = ParameterFloat(name="WapeThreshold", default_value=threshold)
+
+    # Le même conteneur (image SKLearn déjà validée dans ce compte) sert à toutes
+    # les étapes Processing : pas de résolution d'image « processing » par version.
+    processor = ScriptProcessor(
+        command=["python3"],
+        image_uri=IMAGE,
+        instance_type=INSTANCE,
+        instance_count=1,
+        role=role,
+        base_job_name="retail-proc",
+        sagemaker_session=session,
+    )
+
+    # 0) Préparation des features — calculées UNE fois et écrites dans
+    #    s3://<bucket>/features/. L'entraînement et l'évaluation relisent cette
+    #    table (chaînage par propriété : chaque exécution consomme les features
+    #    qu'elle vient de produire). C'est ce qui empêche le train/serve skew :
+    #    une seule définition des features pour tout le pipeline.
+    step_preprocess = ProcessingStep(
+        name="PreprocessFeatures",
+        processor=processor,
+        inputs=[
+            ProcessingInput(
+                source=f"s3://{bucket}/curated/sales/",
+                destination="/opt/ml/processing/input/curated",
+            ),
+            ProcessingInput(
+                source=code_uri,
+                destination="/opt/ml/processing/input/code",
+            ),
+        ],
+        outputs=[
+            ProcessingOutput(
+                output_name="features",
+                source="/opt/ml/processing/output/features",
+                # Un sous-dossier par exécution : deux exécutions concurrentes ne
+                # s'écrasent pas, et le chaînage par propriété garantit que
+                # l'entraînement lit la table de SON exécution.
+                destination=Join(
+                    on="/",
+                    values=[
+                        f"s3://{bucket}/features",
+                        ExecutionVariables.PIPELINE_EXECUTION_ID,
+                    ],
+                ),
+            )
+        ],
+        code=str(PREPROC_SCRIPT),
+    )
+    features_uri = (
+        step_preprocess.properties.ProcessingOutputConfig.Outputs[
+            "features"
+        ].S3Output.S3Uri
+    )
 
     # 1) Entraînement — même image, même code, mêmes hyperparamètres que launch.py
     estimator = SKLearn(
@@ -175,7 +241,7 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
         estimator=estimator,
         inputs={
             "training": TrainingInput(
-                s3_data=f"s3://{bucket}/curated/",
+                s3_data=features_uri,
                 content_type="application/x-parquet",
             )
         },
@@ -184,18 +250,13 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
         # pour rien lors d'une deuxième démonstration.
         cache_config=CacheConfig(enable_caching=True, expire_after="P14D"),
     )
+    # Aucune donnée ne circule entre les deux steps (l'entrée est une propriété
+    # de l'étape précédente, pas un artefact consommé directement) : la
+    # dépendance doit être déclarée explicitement.
+    step_train.add_depends_on([step_preprocess.name])
 
-    # 2) Évaluation — Processing Job. ScriptProcessor + image déjà validée dans
-    #    ce compte : pas de résolution d'image « processing » par version.
-    processor = ScriptProcessor(
-        command=["python3"],
-        image_uri=IMAGE,
-        instance_type=INSTANCE,
-        instance_count=1,
-        role=role,
-        base_job_name="retail-eval",
-        sagemaker_session=session,
-    )
+    # 2) Évaluation — Processing Job : recharge les boosters de l'artefact et
+    #    RECALCULE le WAPE sur la fenêtre de test (features de l'étape 0).
     rapport = PropertyFile(name="EvaluationReport", output_name="evaluation",
                            path="evaluation.json")
     step_eval = ProcessingStep(
@@ -207,9 +268,10 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
                 destination="/opt/ml/processing/input/model",
             ),
             # Données de test : c'est ce qui permet de RECALCULER le WAPE au lieu
-            # de recopier celui de l'entraîneur.
+            # de recopier celui de l'entraîneur. Même table de features que
+            # l'étape d'entraînement (aucune divergence possible).
             ProcessingInput(
-                source=f"s3://{bucket}/curated/",
+                source=features_uri,
                 destination="/opt/ml/processing/input/curated",
             ),
             # Paquet retail_forecast (features + métriques), même archive que
@@ -289,7 +351,7 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
     return Pipeline(
         name=PIPELINE_NAME,
         parameters=[seuil],
-        steps=[step_train, step_eval, step_gate],
+        steps=[step_preprocess, step_train, step_eval, step_gate],
         sagemaker_session=session,
     )
 

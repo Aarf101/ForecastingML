@@ -52,6 +52,9 @@ from retail_forecast.train.train_lgbm import (  # noqa: E402
 
 import lightgbm as lgb  # noqa: E402
 
+# Colonnes marqueurs de l'étape PreprocessFeatures (cf. preprocess_entry.py).
+PREPROCESSED = ("lag_1", "roll_mean_7")
+
 
 def _read_channel(name: str) -> pd.DataFrame:
     """Lit tous les Parquet du canal ``name`` (ou ses CSV)."""
@@ -98,9 +101,21 @@ def main() -> int:
     horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
 
     sales = _read_channel("training")
-    # Une seule passe de features (le rolling coûte cher) ; la cible est recollée.
-    base = build_features(sales, horizon=1, dropna=False)
-    print(f"[entry] features calculées : {len(base):,} lignes, horizons {horizons}")
+    # Deux modes, détectés sur les colonnes :
+    #  * pipeline SageMaker -> l'étape PreprocessFeatures a déjà écrit les lags,
+    #    on ne recalcule rien (une seule définition des features pour tout le
+    #    monde : c'est ce qui évite le train/serve skew) ;
+    #  * Training Job direct (launch.py) -> on calcule ici, une seule passe
+    #    (le rolling coûte cher) et la cible est recollée par horizon.
+    if all(c in sales.columns for c in PREPROCESSED):
+        base = sales if TARGET in sales.columns else add_target(sales, horizon=1)
+        print(
+            f"[entry] features précalculées (étape PreprocessFeatures) : "
+            f"{len(base):,} lignes, horizons {horizons}"
+        )
+    else:
+        base = build_features(sales, horizon=1, dropna=False)
+        print(f"[entry] features calculées : {len(base):,} lignes, horizons {horizons}")
 
     params = {
         **DEFAULT_PARAMS,

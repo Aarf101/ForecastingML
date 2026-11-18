@@ -34,10 +34,13 @@ Deux orchestrateurs coexistent volontairement :
 ## Le pipeline
 
 ```
+PreprocessFeatures Processing Job : features calculées UNE fois (lags, rolling)
+      │  s3://…/features/<execution-id>/features.parquet   ← une seule définition
+      ▼
 TrainLightGBM      Training Job (même image, même code que launch.py) · cache 14 j
       │  s3://…/models/…/output/model.tar.gz
       ▼
-EvaluateModel      Processing Job : RECALCULE le WAPE depuis curated/ + l'artefact
+EvaluateModel      Processing Job : RECALCULE le WAPE depuis les features + l'artefact
       │  evaluation.json -> regression_metrics.test_wape.value
       ▼
 GateWAPE           ConditionStep  (seuil = paramètre WapeThreshold)
@@ -45,10 +48,25 @@ GateWAPE           ConditionStep  (seuil = paramètre WapeThreshold)
       └── WAPE > seuil → WAPETropEleve     (FailStep : exécution rouge, rien de publié)
 ```
 
-L'évaluation **recalcule** le WAPE : elle remonte `curated/` et le paquet du
-projet, reconstruit les features, recharge les boosters `model_<h>.txt` et prédit
-sur les 28 derniers jours. Elle publie aussi l'écart avec les métriques de
-l'artefact — ce qui prouve que le chiffre n'est pas recopié. Si le recalcul est
+### Pourquoi une étape de features
+
+Sans `PreprocessFeatures`, les features sont recalculées par **chaque**
+consommateur : conteneur d'entraînement, client de Batch Transform, échantillon
+envoyé à l'endpoint. Si l'un d'eux change un paramètre (`LAGS`, `ROLLS`),
+l'entraînement et l'inférence ne parlent plus le même espace de features — c'est
+le *train/serve skew*, le défaut le plus courant et le plus silencieux en MLOps.
+Ici la définition vit à un seul endroit, l'étape écrit `features/<execution-id>/`
+dans S3 (un dossier par exécution : deux runs concurrents ne s'écrasent pas), et
+l'entraînement **comme** l'évaluation relisent cette table (chaînage par
+propriété : chaque exécution consomme les features qu'elle vient de produire).
+
+`train_entry.py` détecte les deux cas : colonnes `lag_*` présentes → il ne
+recalcule rien ; absentes (Training Job direct via `launch.py`, qui lit encore
+`curated/`) → il calcule sur place. Les deux chemins restent donc valides.
+
+L'évaluation **recalcule** le WAPE : elle recharge les boosters `model_<h>.txt`
+et prédit sur les 28 derniers jours. Elle publie aussi l'écart avec les métriques
+de l'artefact — ce qui prouve que le chiffre n'est pas recopié. Si le recalcul est
 impossible (dépendance manquante), elle republie l'artefact en le disant
 (`"independent": false`, `"source": "artifact"`), jamais en silence.
 
@@ -90,7 +108,7 @@ python -m infra.sagemaker.pipeline --run --wait
 Rôle | `LabRole` imposé (`SAGEMAKER_ROLE_ARN`) : `iam:CreateRole` est refusé dans le lab |
 Dépendance | `pip install 'sagemaker>=2.214,<3'` — la v3 a déplacé l'API des pipelines |
 Bucket par défaut | forcé sur `S3_BUCKET` (`PipelineSession(default_bucket=…)`) : sinon le SDK tenterait de créer `sagemaker-<région>-<compte>` |
-Code uploadé | construire la définition **uploade** `sourcedir.tar.gz` et `evaluate_entry.py` : il faut donc une session valide, même pour `--dry-run` |
+Code uploadé | construire la définition **uploade** `sourcedir.tar.gz`, `preprocess_entry.py` et `evaluate_entry.py` : il faut donc une session valide, même pour `--dry-run` |
 Permission à vérifier | `sagemaker:CreatePipeline` — si `AccessDenied`, replier sur Step Functions (déjà en place) |
 
 ### Où l'exécuter (et le piège du profil)
@@ -130,7 +148,7 @@ il affiche un repli explicite vers Step Functions s'il est refusé.
 | Action | Durée | Coût |
 |---|---|---|
 Tuning 6 essais × 1 horizon | ~18 min | ~0,03 € |
-Pipeline complet (training 4 horizons + processing) | ~8-10 min | ~0,02 € |
+Pipeline complet (`PreprocessFeatures` + training 4 horizons + processing) | ~10-12 min | ~0,025 € |
 Endpoint serverless au repos | — | ~0 € (facturé à l'inférence, ms) |
 `deploy invoke` (4 prévisions) | ~2 s | < 0,001 € |
 Batch Transform | ~6 min | ~0,01 € |
@@ -151,6 +169,7 @@ Métadonnées statiques sur la version du registre | le SDK v2 n'expose pas `Mod
 Endpoint **serverless** | `ml.m5.large` coûte ~0,11 €/h même sans trafic ; le serverless facture à la milliseconde et retombe à zéro |
 Batch Transform hors pipeline | il dépend de données d'inférence préparées ; le garder dehors évite de payer une instance à chaque exécution |
 Cache 14 j sur `TrainLightGBM` | une deuxième démonstration ne repaie pas l'entraînement si rien n'a changé |
+`PreprocessFeatures` en step dédié, chaîné par propriété | une seule définition des features (pas de *train/serve skew*) et chaque exécution consomme la table qu'elle vient de produire, sans risque de lire celle d'une exécution précédente |
 
 ## Ce qui n'est pas fait (et pourquoi)
 

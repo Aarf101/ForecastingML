@@ -8,7 +8,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (85 tests, ~1 s, aucun service externe requis) |
+| `make test` | pytest (86 tests, ~1 s, aucun service externe requis) |
 | `make train` | entraînement complet LightGBM → `reports/local_baseline.json`, `data/forecast/` |
 | `make train-quick` | même chose sur 15 % des lignes (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |
@@ -55,8 +55,9 @@ infra/sagemaker/
   train_entry.py       script exécuté DANS le conteneur (features + LightGBM)
   launch.py            boto3 create_training_job + packaging sourcedir.tar.gz
   tuning.py            HyperParameter Tuning Job (objectif = test_wape, regex logs)
+  preprocess_entry.py  étape Processing : features calculées UNE fois -> features/
   evaluate_entry.py    étape Processing : artefact -> evaluation.json (gate WAPE)
-  pipeline.py          SageMaker Pipeline (train -> eval -> gate -> registry)
+  pipeline.py          SageMaker Pipeline (features -> train -> eval -> gate -> registry)
   deploy.py            endpoint serverless du modele approuve (up/invoke/down)
   register.py          Model Registry (gate WAPE_THRESHOLD -> Approved)
 docs/  architecture.md (doc de référence), learner_lab.md (accès au compte AWS),

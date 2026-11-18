@@ -3,11 +3,13 @@
 Ce script tourne **dans un job Processing**, pas en local. Il fait deux choses,
 dans cet ordre :
 
-1. **Évaluation indépendante** — il reconstruit les features depuis les Parquet de
-   ``curated/``, recharge les boosters ``model_<h>.txt`` de l'artefact, prédit sur
-   la fenêtre de test (28 derniers jours, jamais vue à l'entraînement) et
-   recalcule le WAPE. C'est la seule façon de vraiment *évaluer* : recopier les
-   métriques de l'entraîneur ne prouverait rien.
+1. **Évaluation indépendante** — il recharge les boosters ``model_<h>.txt`` de
+   l'artefact, prédit sur la fenêtre de test (28 derniers jours, jamais vue à
+   l'entraînement) et recalcule le WAPE. C'est la seule façon de vraiment
+   *évaluer* : recopier les métriques de l'entraîneur ne prouverait rien. Les
+   features proviennent de l'étape ``PreprocessFeatures`` (même table que
+   l'entraînement) ; sur un artefact plus ancien, il les recalcule depuis
+   ``curated/``.
 2. **Repli explicite** — si les dépendances (LightGBM, pyarrow) ou le paquet
    ``retail_forecast`` sont indisponibles, il republie les métriques de
    l'artefact en marquant ``"independent": false``. Jamais de chiffre inventé,
@@ -16,7 +18,8 @@ dans cet ordre :
 Montage SageMaker :
 
 * entrée  : ``/opt/ml/processing/input/model/model.tar.gz``
-* entrée  : ``/opt/ml/processing/input/curated/`` (Parquet de ``curated/sales/``)
+* entrée  : ``/opt/ml/processing/input/curated/`` (features précalculées, ou
+  Parquet de ``curated/sales/`` pour un artefact antérieur)
 * entrée  : ``/opt/ml/processing/input/code/sourcedir.tar.gz`` (paquet du projet)
 * sortie  : ``/opt/ml/processing/output/evaluation.json``
 """
@@ -37,6 +40,9 @@ OUTPUT = Path("/opt/ml/processing/output")
 
 TEST_DAYS = 28
 VALID_DAYS = 56
+
+# Colonnes marqueurs de l'étape PreprocessFeatures (cf. preprocess_entry.py).
+PREPROCESSED = ("lag_1", "roll_mean_7")
 
 
 def _read_json_from_tar(archive: Path, suffix: str) -> dict:
@@ -127,7 +133,15 @@ def _recompute(archive: Path) -> dict | None:
         frames = [pd.read_parquet(f) for f in fichiers]
         sales = pd.concat(frames, ignore_index=True)
         sales["date"] = pd.to_datetime(sales["date"])
-        base = build_features(sales, horizon=1, dropna=False)
+        # Même détection que train_entry : dans le pipeline, l'étape
+        # PreprocessFeatures a déjà écrit les lags — recalculer ici donnerait la
+        # même table pour un coût inutile, et masquerait une désynchronisation.
+        if all(c in sales.columns for c in PREPROCESSED):
+            base = sales if TARGET in sales.columns else add_target(sales, horizon=1)
+            print("[evaluate] features précalculées relues (pas de recalcul)")
+        else:
+            base = build_features(sales, horizon=1, dropna=False)
+            print("[evaluate] features recalculées depuis curated/")
 
         resultat: dict[str, float] = {}
         for horizon in metadata["horizons"]:

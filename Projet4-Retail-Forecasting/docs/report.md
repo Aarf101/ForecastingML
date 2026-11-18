@@ -281,24 +281,34 @@ réglage manuel validé (WAPE 0,4298 côté cloud).
 ### 4.3 bis SageMaker Pipelines
 
 Le sujet demande « la mise en place de SageMaker Pipelines ». Le pipeline
-`retail-forecast-mlops` (`infra/sagemaker/pipeline.py`) enchaîne quatre steps :
+`retail-forecast-mlops` (`infra/sagemaker/pipeline.py`) enchaîne cinq steps :
 
 ```
-TrainLightGBM → EvaluateModel → GateWAPE ─┬─ WAPE ≤ seuil → RegisterApproved
-                                          └─ WAPE > seuil → WAPETropEleve (échec)
+PreprocessFeatures → TrainLightGBM → EvaluateModel → GateWAPE ─┬─ WAPE ≤ seuil → RegisterApproved
+                                                               └─ WAPE > seuil → WAPETropEleve (échec)
 ```
 
-`EvaluateModel` est un Processing Job qui **recalcule** le WAPE : il remonte
-`curated/` et le paquet du projet, reconstruit les features, recharge les boosters
-`model_<h>.txt` et prédit sur les 28 derniers jours, puis publie `evaluation.json`
-au format `regression_metrics` avec l'écart par rapport aux métriques de
-l'artefact. Si le recalcul est impossible, le rapport porte `"independent": false`
-plutôt que de faire passer une copie pour une mesure. La condition `GateWAPE` lit
-ce fichier, sur le **WAPE moyen des quatre horizons** — la même grandeur que la
-Lambda `retail-register-model`. Deux orchestrateurs coexistent donc : Step
-Functions pour la chaîne complète (ingestion → ETL → ML → publication) et
-SageMaker Pipelines pour la partie ML, conformément à la demande du sujet.
-Détails : `docs/sagemaker_pipelines.md`.
+`PreprocessFeatures` est un Processing Job qui calcule les features **une seule
+fois** et les écrit dans `s3://…/features/`. Sans cette étape, chaque consommateur
+les recalcule (conteneur d'entraînement, client de Batch Transform, échantillon
+envoyé à l'endpoint) : si l'un change `LAGS` ou `ROLLS`, l'entraînement et
+l'inférence ne parlent plus le même espace de features — c'est le *train/serve
+skew*. Ici la définition vit à un seul endroit, et l'entraînement comme
+l'évaluation relisent la table produite par l'exécution en cours (chaînage par
+propriété). `train_entry.py` reste compatible avec l'ancien mode : s'il ne trouve
+pas les colonnes `lag_*`, il calcule sur place (Training Job direct via
+`launch.py`).
+
+`EvaluateModel` est un Processing Job qui **recalcule** le WAPE : il recharge les
+boosters `model_<h>.txt` et prédit sur les 28 derniers jours, puis publie
+`evaluation.json` au format `regression_metrics` avec l'écart par rapport aux
+métriques de l'artefact. Si le recalcul est impossible, le rapport porte
+`"independent": false` plutôt que de faire passer une copie pour une mesure. La
+condition `GateWAPE` lit ce fichier, sur le **WAPE moyen des quatre horizons** —
+la même grandeur que la Lambda `retail-register-model`. Deux orchestrateurs
+coexistent donc : Step Functions pour la chaîne complète (ingestion → ETL → ML →
+publication) et SageMaker Pipelines pour la partie ML, conformément à la demande
+du sujet. Détails : `docs/sagemaker_pipelines.md`.
 
 Le **déploiement** est double : Batch Transform pour les prévisions de masse, et
 un endpoint **serverless** (`infra/sagemaker/deploy.py`, 2 Go, concurrence 2) qui
