@@ -146,6 +146,20 @@ def test_summary_reports_counts():
     assert "articles  : 2" in text
 
 
+def test_written_parquet_uses_microseconds(tmp_path):
+    """Spark 3.3 (Glue 4.0) refuse TIMESTAMP(NANOS) : on écrit en microsecondes."""
+    import pyarrow.parquet as pq
+
+    df = load.normalize(_raw_m5_like())
+    dest = tmp_path / "out.parquet"
+    load.write_any(df, str(dest))
+
+    field_type = pq.read_schema(dest).field("date").type
+    assert "us" in str(field_type), f"attendu timestamp[us], obtenu {field_type}"
+    assert "ns" not in str(field_type)
+
+
+
 # --- colonnes constantes (--set) --------------------------------------------
 
 

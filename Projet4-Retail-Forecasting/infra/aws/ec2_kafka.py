@@ -280,7 +280,7 @@ def run_script(
 BOOTSTRAP_SCRIPT = """set -euxo pipefail
 dnf install -y python3-pip >/dev/null 2>&1 || true
 python3 -m pip install -q --upgrade pip 2>/dev/null || true
-python3 -m pip install -q kafka-python boto3 pandas pyarrow
+python3 -m pip install -q kafka-python boto3 pandas pyarrow python-dateutil
 python3 - <<'PY'
 import boto3
 boto3.client("s3", region_name="us-east-1").download_file(
@@ -288,6 +288,7 @@ boto3.client("s3", region_name="us-east-1").download_file(
 print("repo telecharge")
 PY
 rm -rf /opt/retail && mkdir -p /opt/retail && tar xzf /tmp/r.tgz -C /opt/retail
+python3 -m pip install -q -e /opt/retail 2>/dev/null && echo "paquet installé (plus besoin de PYTHONPATH)" || true
 echo bootstrap-ok
 """
 

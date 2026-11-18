@@ -209,9 +209,22 @@ def load_dataset(
 
 
 def write_any(df: pd.DataFrame, dest: str) -> int:
-    """Écrit le DataFrame en Parquet vers un chemin local ou une URI ``s3://``."""
+    """Écrit le DataFrame en Parquet vers un chemin local ou une URI ``s3://``.
+
+    La colonne ``date`` est convertie en **microsecondes** : pandas écrit par
+    défaut des timestamps en nanosecondes (``TIMESTAMP(NANOS)``), que Spark 3.3
+    (Glue 4.0) refuse de lire — « Illegal Parquet type: INT64
+    (TIMESTAMP(NANOS,false)) ».
+    """
+    out = df.copy()
+    if "date" in out.columns:
+        try:
+            out["date"] = out["date"].astype("datetime64[us]")
+        except (TypeError, ValueError):  # pandas < 2 : pas de datetime64[us]
+            out["date"] = pd.to_datetime(out["date"]).astype("datetime64[ms]")
+
     buf = io.BytesIO()
-    df.to_parquet(buf, index=False, compression="snappy")
+    out.to_parquet(buf, index=False, compression="snappy")
     data = buf.getvalue()
 
     if dest.startswith("s3://"):
