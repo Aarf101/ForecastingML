@@ -36,6 +36,8 @@ FUNCTION = "retail-register-model"
 MACHINE = "retail-forecast-pipeline"
 RULE = "retail-forecast-daily"
 GLUE_JOB = "retail-etl-raw-to-curated"
+# Job « chargeur » : dataset S3 -> Firehose, sans Kafka (test en pur console).
+LOADER_JOB = "retail-load-dataset"
 GROUP = "retail-forecast-lgbm"
 IMAGE = (
     "683313688378.dkr.ecr.us-east-1.amazonaws.com/"
@@ -410,6 +412,64 @@ def deploy_glue_job(c: dict, role: str) -> None:
     except c["glue"].exceptions.EntityNotFoundException:
         c["glue"].create_job(**job)
         print(f"[glue] {GLUE_JOB} créé ({script_location})")
+
+
+def deploy_loader_job(c: dict, role: str) -> None:
+    """Déploie le job Glue « chargeur » : dataset S3 -> Firehose (sans Kafka).
+
+    Permet de tester un dataset quelconque **sans terminal** : on dépose le fichier
+    dans ``uploads/``, on renseigne ``--SOURCE`` dans les paramètres du job et on
+    lance. Les lignes normalisées partent dans Firehose, donc dans ``raw/sales/``,
+    exactement comme celles venues de Kafka.
+    """
+    from retail_forecast.ingest.storage import s3_client
+
+    script = Path(__file__).resolve().parents[1] / "glue" / "load_and_push.py"
+    key = "code/glue/load_and_push.py"
+    s3_client().put_object(
+        Bucket=SETTINGS.bucket,
+        Key=key,
+        Body=script.read_bytes(),
+        ContentType="text/x-python",
+    )
+    script_location = f"s3://{SETTINGS.bucket}/{key}"
+
+    job = {
+        "Name": LOADER_JOB,
+        "Role": role,
+        "Command": {
+            "Name": "glueetl",
+            "ScriptLocation": script_location,
+            "PythonVersion": "3",
+        },
+        # ``--SOURCE`` volontairement absent : il doit être fourni à chaque
+        # lancement (« Run with parameters »), sinon on ne saurait pas quel
+        # dataset est ingéré. Le script échoue alors avec un message explicite.
+        "DefaultArguments": {
+            "--BUCKET": SETTINGS.bucket,
+            "--DATASET": "extrait",
+            "--STREAM": "retail-sales-direct",
+            "--LIMIT": "20000",
+            "--job-language": "python",
+            "--enable-metrics": "true",
+            "--enable-continuous-cloudwatch-log": "true",
+        },
+        "GlueVersion": "4.0",
+        "WorkerType": "G.1X",
+        "NumberOfWorkers": 2,
+        "Timeout": 15,
+        "MaxRetries": 0,
+        "ExecutionProperty": {"MaxConcurrentRuns": 1},
+    }
+
+    try:
+        c["glue"].get_job(JobName=LOADER_JOB)
+        update = {k: v for k, v in job.items() if k != "Name"}
+        c["glue"].update_job(JobName=LOADER_JOB, JobUpdate=update)
+        print(f"[glue] {LOADER_JOB} mis à jour ({script_location})")
+    except c["glue"].exceptions.EntityNotFoundException:
+        c["glue"].create_job(**job)
+        print(f"[glue] {LOADER_JOB} créé ({script_location})")
 
 
 def main(argv: list[str] | None = None) -> int:

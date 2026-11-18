@@ -145,12 +145,31 @@ l'instance via **SSM** (`run_script`), donc ni SSH ni clé. Sur l'EC2, la variab
 |---|---|
 bucket `raw/ historique curated models forecast reports code` | S3 dans la console |
 `raw/historique/sales.parquet` (876 000 lignes) | — |
-Firehose `retail-sales-direct` (DirectPut) | bouton **Test with demo data** |
+Firehose `retail-sales-direct` (DirectPut) | alimenté par Kafka **ou** par le job chargeur (jamais de données de démonstration) |
 EC2 `t3.medium` + Kafka `sales.events` (3 partitions) | Session Manager : `producer` + `kafka_to_firehose` |
 dépôt `/opt/retail` + `pip install -e` sur l'instance | les deux commandes affichées en fin de sortie |
 job Glue `retail-etl-raw-to-curated` | onglet **Run** |
+job Glue `retail-load-dataset` (`infra/glue/load_and_push.py`) | **Action → Run with parameters**, `--SOURCE=s3://…/uploads/<fichier>.csv` |
 machine `retail-forecast-pipeline` (+ Lambda gate) | **Start execution** `{"run_id": "…"}` |
 Athena : base `retail_forecast`, tables `curated_sales` / `forecast` | query editor |
+
+### Ingérer de vraies données, sans terminal (chemin B)
+
+Le job `retail-load-dataset` existe pour ça : il lit un fichier de `uploads/`, le
+normalise (**mêmes règles que `data/load.py`**), l'écrit dans
+`raw/historique/<nom>.parquet` et pousse les lignes dans Firehose — donc dans
+`raw/sales/`, comme le ferait Kafka.
+
+| Étape | Console |
+|---|---|
+1 | **S3 → `uploads/`** → déposer un CSV/Parquet |
+2 | **Glue → `retail-load-dataset` → Action → Run with parameters** |
+3 | `--SOURCE=s3://…/uploads/mon_fichier.csv` (+ `--DATASET`, `--LIMIT=20000`) |
+4 | **Run** → attendre `SUCCEEDED` (~4 min) |
+5 | 60 s → **S3 → `raw/sales/`** → nouvel objet |
+
+Aucun jeu de démonstration ne rentre dans le lac : seules de vraies lignes, soit
+via Kafka (chemin A), soit via ce job (chemin B).
 
 Non créé volontairement : **règle EventBridge** (une exécution planifiée coûte
 ~0,16 € par déclenchement) et **endpoint LLM** (`make sagemaker-deploy` / démarrage

@@ -151,6 +151,8 @@ def deploy_processing(with_machine: bool = True) -> dict[str, str]:
     role = orchestrate._role_arn(c)
 
     orchestrate.deploy_glue_job(c, role)
+    # Second job : chargeur dataset -> Firehose (test sans terminal ni Kafka).
+    orchestrate.deploy_loader_job(c, role)
 
     machine = ""
     if with_machine:
@@ -160,7 +162,11 @@ def deploy_processing(with_machine: bool = True) -> dict[str, str]:
         print("[sfn] machine ignorée (--no-machine)")
 
     ensure_athena()
-    return {"glue": orchestrate.GLUE_JOB, "machine": machine}
+    return {
+        "glue": orchestrate.GLUE_JOB,
+        "loader": orchestrate.LOADER_JOB,
+        "machine": machine,
+    }
 
 
 def print_setup_summary(
@@ -179,22 +185,30 @@ def print_setup_summary(
     print(f"  EC2 + Kafka : {instance_id} · {private_ip}:9092 · dépôt dans /opt/retail")
     if processing:
         print(f"  Glue        : {processing['glue']} (raw/ -> curated/)")
+        if processing.get("loader"):
+            print(f"              : {processing['loader']} (dataset S3 -> Firehose, sans Kafka)")
         if processing.get("machine"):
             print(f"  Step Func.  : arn:…:stateMachine:retail-forecast-pipeline")
         print("  Athena      : base retail_forecast (curated_sales, forecast)")
-    print("\nTester sans Kafka, en clics (console) :")
-    print(f"  1. Firehose -> {stream} -> bouton 'Test with demo data' -> Send")
-    print("  2. attendre 60 s -> S3 -> raw/sales/ -> objet AAAA/MM/JJ/HH/*.gz")
-    print("  3. Glue -> retail-etl-raw-to-curated -> Run")
-    print("  4. S3 -> curated/sales/ (4 Parquet) · Athena -> retail_forecast")
-    print("\nTester avec Kafka (terminal du navigateur) :")
-    print("  EC2 -> Connect -> Session Manager -> Connect, puis :")
-    print(f"  cd /opt/retail && export PYTHONPATH=/opt/retail/src \\\n"
-          f"      S3_BUCKET={SETTINGS.bucket} AWS_REGION={REGION}")
-    print(f"  python3 -m retail_forecast.ingest.producer --limit 20000 "
+    print("\nIngérer DE VRAIES données — deux chemins, aucun jeu de démonstration :")
+    print("\n  A. Avec Kafka (le chemin du schéma). Terminal du navigateur :")
+    print(f"     EC2 -> {instance_id} -> Connect -> Session Manager -> Connect, puis :")
+    print(f"     cd /opt/retail && export PYTHONPATH=/opt/retail/src \\")
+    print(f"         S3_BUCKET={SETTINGS.bucket} AWS_REGION={REGION}")
+    print(f"     python3 -m retail_forecast.ingest.producer --limit 20000 "
           f"--bootstrap {private_ip}:9092")
-    print(f"  python3 -m retail_forecast.ingest.kafka_to_firehose --bootstrap "
+    print(f"     python3 -m retail_forecast.ingest.kafka_to_firehose --bootstrap "
           f"{private_ip}:9092 --stream {stream} --max-messages 20000")
+    print("\n  B. Sans terminal, sans Kafka. Glue -> job 'retail-load-dataset' :")
+    print(f"     1. S3 -> {SETTINGS.bucket}/uploads/ -> déposer un CSV/Parquet")
+    print("     2. Glue -> retail-load-dataset -> Action -> 'Run with parameters'")
+    print(f"        --SOURCE=s3://{SETTINGS.bucket}/uploads/<fichier>.csv")
+    print(f"        --DATASET=<nom>  --STREAM={stream}  --LIMIT=20000")
+    print("     3. Run : les lignes normalisées partent dans Firehose -> raw/sales/")
+    print("\nPuis, dans les deux cas :")
+    print("  attendre 60 s -> S3 -> raw/sales/ -> objet AAAA/MM/JJ/HH/*.gz")
+    print("  Glue -> retail-etl-raw-to-curated -> Run")
+    print("  S3 -> curated/sales/ · Athena -> SELECT * FROM retail_forecast.curated_sales")
     print("\nNettoyage : python -m infra.aws.ingest_all --down")
 
 

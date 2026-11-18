@@ -208,7 +208,11 @@ def test_full_setup_stops_before_ingestion(monkeypatch, capsys):
         ingest_all,
         "deploy_processing",
         lambda with_machine=True: calls.append(f"processing:{with_machine}")
-        or {"glue": "retail-etl-raw-to-curated", "machine": "arn:aws:states:::x"},
+        or {
+            "glue": "retail-etl-raw-to-curated",
+            "loader": "retail-load-dataset",
+            "machine": "arn:aws:states:::x",
+        },
     )
     monkeypatch.setattr(
         ingest_all.ec2_kafka, "run_ingest", lambda *a, **k: calls.append("INGESTION")
