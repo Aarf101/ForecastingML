@@ -15,6 +15,10 @@ Paramètres de job (Job details -> Job parameters) :
     --STREAM    delivery stream Firehose            (défaut: retail-sales-direct)
     --LIMIT     lignes poussées dans Firehose       (défaut: 20000)
     --MAPPING   "Store=store_id,Sales=units"        (optionnel)
+    --SET       "item_id=TOTAL"                     (optionnel : colonne absente)
+
+Le Parquet écrit dans ``raw/historique/`` contient **toutes** les lignes
+normalisées ; ``--LIMIT`` ne borne que ce qui part dans Firehose.
 
 Rôle IAM : ``LabRole`` (aucun rôle à créer). 2 × G.1X suffisent.
 """
@@ -58,6 +62,14 @@ for pair in (opts.get("--MAPPING") or "").split(","):
         src, _, dst = pair.partition("=")
         explicit[src.strip()] = dst.strip()
 
+# Constantes : colonnes absentes de la source (ex. Rossmann n'a pas d'article).
+# Même rôle que ``--set`` dans ``retail_forecast.data.load``.
+consts: dict[str, str] = {}
+for pair in (opts.get("--SET") or "").split(","):
+    if "=" in pair:
+        col, _, val = pair.partition("=")
+        consts[col.strip()] = val.strip()
+
 spark = GlueContext(SparkContext.getOrCreate()).spark_session
 # --- 1. lecture brute -------------------------------------------------------
 raw = spark.read.option("header", True).option("inferSchema", True).csv(source)
@@ -68,6 +80,11 @@ for col in raw.columns:
     low = col.strip().lower()
     rename[col] = explicit.get(col) or ALIASES.get(low, low)
 df = raw.toDF(*[rename[c] for c in raw.columns])
+
+for col, val in consts.items():
+    if col not in df.columns:
+        df = df.withColumn(col, F.lit(val))
+        print(f"[load] colonne constante ajoutée : {col}={val}")
 
 missing = [c for c in ("date", "store_id", "item_id", "units") if c not in df.columns]
 if missing:

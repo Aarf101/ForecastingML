@@ -92,7 +92,12 @@ def run_query(client, sql: str, label: str, wait: bool = True) -> list[tuple]:
         tuple(col.get("VarCharValue") for col in row["Data"])
         for row in result["ResultSet"]["Rows"]
     ]
-    print(f"[athena] {label} : {len(rows) - 1} lignes")
+    # Un DDL ne renvoie aucune ligne : ``len(rows) - 1`` afficherait -1.
+    ddl = sql.lstrip().upper().startswith(("CREATE", "DROP", "ALTER", "MSCK"))
+    if ddl:
+        print(f"[athena] {label} : OK")
+    else:
+        print(f"[athena] {label} : {max(len(rows) - 1, 0)} lignes")
     return rows
 
 

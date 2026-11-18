@@ -135,7 +135,12 @@ def ensure_athena() -> None:
 
     client = athena._athena()
     for sql in athena.DDL:
-        label = " ".join(sql.split("(")[0].split()[:5])
+        upper = sql.upper()
+        if "DATABASE" in upper:
+            label = f"base {athena.DATABASE}"
+        else:  # nom de table : ce qui suit IF NOT EXISTS, avant la parenthèse
+            reste = sql.split("EXISTS", 1)[-1].strip().split("(")[0].strip()
+            label = f"table {reste}"
         try:
             athena.run_query(client, sql, label)
         except Exception as exc:  # noqa: BLE001 - dégradation explicite
