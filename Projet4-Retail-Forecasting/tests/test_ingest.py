@@ -173,3 +173,61 @@ def test_run_respects_max_messages(tmp_path):
         len(gzip.decompress(p.read_bytes()).decode().strip().split("\n"))
         for p in Path(tmp_path).rglob("*.json.gz")
     ) == 25
+
+
+def test_full_setup_stops_before_ingestion(monkeypatch, capsys):
+    """--full-setup crée l'infra d'ingestion ET le traitement, sans envoyer de données.
+
+    Vérifie l'ordre réel des appels et surtout que ni le producteur ni Glue ne
+    sont lancés : c'est la promesse de la commande (on prépare, on ne dépense pas).
+    """
+    from infra.aws import ingest_all
+
+    calls: list[str] = []
+    monkeypatch.setattr(ingest_all, "check_session", lambda: calls.append("session") or "123")
+    monkeypatch.setattr(ingest_all, "ensure_bucket", lambda: calls.append("bucket"))
+    monkeypatch.setattr(
+        ingest_all, "ensure_dataset", lambda regenerate=False: calls.append("dataset")
+    )
+    monkeypatch.setattr(
+        ingest_all.firehose_direct, "ensure", lambda name: calls.append(f"firehose:{name}")
+    )
+    monkeypatch.setattr(
+        ingest_all.ec2_kafka,
+        "up",
+        lambda: calls.append("ec2")
+        or {"instance_id": "i-test", "private_ip": "172.31.0.1"},
+    )
+    monkeypatch.setattr(
+        ingest_all.ec2_kafka, "bootstrap", lambda i, b: calls.append("bootstrap")
+    )
+    monkeypatch.setattr(
+        ingest_all.ec2_kafka, "wait_kafka", lambda i: calls.append("wait_kafka")
+    )
+    monkeypatch.setattr(
+        ingest_all,
+        "deploy_processing",
+        lambda with_machine=True: calls.append(f"processing:{with_machine}")
+        or {"glue": "retail-etl-raw-to-curated", "machine": "arn:aws:states:::x"},
+    )
+    monkeypatch.setattr(
+        ingest_all.ec2_kafka, "run_ingest", lambda *a, **k: calls.append("INGESTION")
+    )
+    monkeypatch.setattr(ingest_all, "run_glue", lambda *a, **k: calls.append("GLUE"))
+
+    assert ingest_all.main(["--full-setup"]) == 0
+
+    assert calls == [
+        "session",
+        "bucket",
+        "dataset",
+        "firehose:retail-sales-direct",
+        "ec2",
+        "bootstrap",
+        "wait_kafka",
+        "processing:True",
+    ]
+    sortie = capsys.readouterr().out
+    assert "ENVIRONNEMENT PRÊT" in sortie
+    assert "retail-etl-raw-to-curated" in sortie
+    assert "/opt/retail" in sortie

@@ -37,6 +37,7 @@ help:
 	@echo "make aws-ingest-status etat Kinesis/Firehose/Lambda + objets raw/sales/"
 	@echo "make aws-ingest-all  TOUT : bucket, Firehose, EC2+Kafka, ingestion, Glue"
 	@echo "make aws-setup-only  cree l'environnement et s'arrete (test via la console)"
+	@echo "make aws-env-full    environnement COMPLET : ingestion + Glue + StepFunc + Athena (0 donnee)"
 	@echo "make aws-ingest-all-down idem puis supprime EC2 + Firehose"
 	@echo "make dataset-info  inspecte un dataset quelconque (SOURCE=...)"
 	@echo "make ingest-dataset convertit un dataset vers S3 (SOURCE=... DEST=...)"
@@ -218,6 +219,11 @@ aws-ingest-all:
 
 aws-setup-only:
 	$(PY) -u -m infra.aws.ingest_all --setup-only
+
+# Environnement COMPLET (ingestion + job Glue + Step Functions + Athena), sans
+# envoyer de données : on prépare, puis on teste à la main dans la console.
+aws-env-full:
+	$(PY) -u -m infra.aws.ingest_all --full-setup
 
 # Même chose, mais la sortie est écrite dans /tmp/aws-setup.log ET affichée.
 # Utile quand le terminal appelant bufferise la sortie (pipe au lieu de tty).

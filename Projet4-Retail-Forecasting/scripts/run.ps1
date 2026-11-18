@@ -24,7 +24,7 @@ param(
         'etl', 'diagram', 'slides', 'dashboard', 'brief',
         'aws-inventory', 'aws-setup', 'aws-bootstrap', 'aws-run',
         'aws-firehose-up', 'kafka-all', 'kafka-up', 'kafka-run',
-        'kafka-status', 'kafka-down', 'aws-ingest-all',
+        'kafka-status', 'kafka-down', 'aws-ingest-all', 'aws-env-full',
         'aws-upload-repo', 'aws-teardown',
         'sagemaker-train', 'sagemaker-register', 'sagemaker-transform',
         'sagemaker-tune', 'sagemaker-pipeline', 'sagemaker-pipeline-run',
@@ -75,6 +75,7 @@ Usage : .\scripts\run.ps1 <tache>
   aws-inventory    inventaire des ressources AWS présentes
   aws-firehose-up  crée le Firehose DirectPut (Kafka -> S3)
   aws-ingest-all   TOUT : bucket, Firehose, EC2+Kafka, ingestion, Glue
+  aws-env-full     environnement COMPLET (ingestion + Glue + StepFunc + Athena), 0 donnée
   kafka-all        EC2 + Kafka + deps + producteur + pont Firehose (7 min)
   kafka-up         crée l'EC2 Kafka et installe pip + le dépôt
   kafka-run        rejoue 20 000 ventes et pousse vers Firehose
@@ -129,6 +130,7 @@ Les scripts .sh (make up / produce / consume) nécessitent Git Bash ou WSL.
     # dependances sur l'EC2 (via SSM) et rejoue le dataset.
     'aws-firehose-up'  { Invoke-Py @('-m', 'infra.aws.firehose_direct', 'up') }
     'aws-ingest-all'   { Invoke-Py @('-m', 'infra.aws.ingest_all') }
+    'aws-env-full'     { Invoke-Py @('-m', 'infra.aws.ingest_all', '--full-setup') }
     'kafka-all'        { Invoke-Py @('-m', 'infra.aws.ec2_kafka', 'all', '--limit', '20000') }
     'kafka-up'         { Invoke-Py @('-m', 'infra.aws.ec2_kafka', 'up', '--with-deps') }
     'kafka-run'        { Invoke-Py @('-m', 'infra.aws.ec2_kafka', 'run', '--limit', '20000') }

@@ -1,4 +1,4 @@
-"""Zéro -> ingestion testée dans AWS, en **une seule commande**.
+"""Zéro -> environnement complet (ingestion + traitement) dans AWS, en une commande.
 
 Crée (ou réutilise) tout ce qu'il faut pour voir un événement traverser
 Kafka -> Firehose -> S3, puis lance l'ETL Glue si demandé.
@@ -9,19 +9,26 @@ Kafka -> Firehose -> S3, puis lance l'ETL Glue si demandé.
     4. instance EC2 + Kafka (KRaft)
     5. pip + dépôt dans /opt/retail sur l'instance
     6. attente du conteneur Kafka
-    7. producteur 20 000 messages + pont vers Firehose
-    8. attente de la livraison S3 (tampon Firehose 60 s)
-    9. (option) job Glue -> curated/
-   10. (option) arrêt de l'EC2 et suppression du stream
+    7. (--full-setup) traitement et catalogue : job Glue, machine Step Functions,
+       base et tables Athena
+    8. producteur 20 000 messages + pont vers Firehose
+    9. attente de la livraison S3 (tampon Firehose 60 s)
+   10. (option) job Glue -> curated/
+   11. (option) arrêt de l'EC2 et suppression du stream
 
 Usage :
 
+    python -m infra.aws.ingest_all --full-setup     # environnement complet, 0 donnée
     python -m infra.aws.ingest_all                  # tout, avec ETL
     python -m infra.aws.ingest_all --skip-glue      # ingestion seule
     python -m infra.aws.ingest_all --down           # nettoie à la fin
     python -m infra.aws.ingest_all --limit 5000
 
 Chaque étape est idempotente : relancer ne recrée que ce qui manque.
+
+``--full-setup`` ne déploie **pas** la règle EventBridge : une exécution planifiée
+coûte ~0,16 € par déclenchement, on la laisse donc à un geste explicite
+(``make aws-pipeline-up``).
 """
 
 from __future__ import annotations
@@ -118,7 +125,50 @@ def run_glue(wait: bool = True) -> str:
     raise RuntimeError("job Glue toujours en cours après 20 min")
 
 
-def print_setup_summary(instance_id: str, private_ip: str, stream: str) -> None:
+def ensure_athena() -> None:
+    """Crée la base et les tables externes (DDL : coût nul, contrairement au crawler).
+
+    Une table en échec (préfixe S3 absent, droits) ne bloque pas la mise en place :
+    on continue et on l'affiche.
+    """
+    from infra.athena import setup as athena
+
+    client = athena._athena()
+    for sql in athena.DDL:
+        label = " ".join(sql.split("(")[0].split()[:5])
+        try:
+            athena.run_query(client, sql, label)
+        except Exception as exc:  # noqa: BLE001 - dégradation explicite
+            print(f"[athena] {label} impossible : {str(exc).splitlines()[0][:80]}")
+
+
+def deploy_processing(with_machine: bool = True) -> dict[str, str]:
+    """Déploie le traitement : job Glue, machine Step Functions, catalogue Athena.
+
+    La règle EventBridge n'est **pas** créée (voir la docstring du module).
+    """
+    c = orchestrate._clients()
+    role = orchestrate._role_arn(c)
+
+    orchestrate.deploy_glue_job(c, role)
+
+    machine = ""
+    if with_machine:
+        gate_arn = orchestrate.deploy_lambda(c, role)
+        machine = orchestrate.deploy_machine(c, role, gate_arn)
+    else:
+        print("[sfn] machine ignorée (--no-machine)")
+
+    ensure_athena()
+    return {"glue": orchestrate.GLUE_JOB, "machine": machine}
+
+
+def print_setup_summary(
+    instance_id: str,
+    private_ip: str,
+    stream: str,
+    processing: dict[str, str] | None = None,
+) -> None:
     """Affiche ce qui a été créé et les commandes/clics à faire ensuite."""
     print("\n" + "=" * 64)
     print("ENVIRONNEMENT PRÊT — aucune donnée n'a été envoyée")
@@ -127,6 +177,11 @@ def print_setup_summary(instance_id: str, private_ip: str, stream: str) -> None:
     print(f"  dataset     : s3://{SETTINGS.bucket}/raw/historique/sales.parquet")
     print(f"  Firehose    : {stream} (DirectPut) -> raw/sales/")
     print(f"  EC2 + Kafka : {instance_id} · {private_ip}:9092 · dépôt dans /opt/retail")
+    if processing:
+        print(f"  Glue        : {processing['glue']} (raw/ -> curated/)")
+        if processing.get("machine"):
+            print(f"  Step Func.  : arn:…:stateMachine:retail-forecast-pipeline")
+        print("  Athena      : base retail_forecast (curated_sales, forecast)")
     print("\nTester sans Kafka, en clics (console) :")
     print(f"  1. Firehose -> {stream} -> bouton 'Test with demo data' -> Send")
     print("  2. attendre 60 s -> S3 -> raw/sales/ -> objet AAAA/MM/JJ/HH/*.gz")
@@ -153,7 +208,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--setup-only",
         action="store_true",
-        help="créer l'environnement et s'arrêter avant l'ingestion (pour tester via la console)",
+        help="créer l'environnement d'ingestion et s'arrêter avant l'ingestion",
+    )
+    parser.add_argument(
+        "--full-setup",
+        action="store_true",
+        help="environnement COMPLET (ingestion + job Glue + Step Functions + Athena), "
+        "sans envoyer de données",
+    )
+    parser.add_argument(
+        "--no-machine",
+        action="store_true",
+        help="avec --full-setup : ne pas créer la machine Step Functions",
     )
     parser.add_argument("--skip-dataset", action="store_true", help="ne pas vérifier le dataset")
     parser.add_argument("--regenerate-data", action="store_true")
@@ -161,7 +227,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--delivery-timeout", type=int, default=300)
     args = parser.parse_args(argv)
 
-    total = 6 if args.setup_only else (7 if args.skip_glue else 8)
+    if args.full_setup:
+        total = 7          # 6 d'infrastructure d'ingestion + le traitement
+    elif args.setup_only:
+        total = 6
+    else:
+        total = 7 if args.skip_glue else 8
 
     step(1, total, "session et bucket")
     check_session()
@@ -186,8 +257,12 @@ def main(argv: list[str] | None = None) -> int:
     step(6, total, "attente du conteneur Kafka")
     ec2_kafka.wait_kafka(instance_id)
 
-    if args.setup_only:
-        print_setup_summary(instance_id, private_ip, args.stream)
+    if args.setup_only or args.full_setup:
+        processing = None
+        if args.full_setup:
+            step(7, total, "traitement et catalogue : Glue + Step Functions + Athena")
+            processing = deploy_processing(with_machine=not args.no_machine)
+        print_setup_summary(instance_id, private_ip, args.stream, processing)
         return 0
 
     step(7, total, f"ingestion : {args.limit:,} messages -> Firehose -> S3")

@@ -106,6 +106,11 @@ assuré par le service, ce qui est bien le comportement décrit par la diapositi
 ## 3. Commandes
 
 ```bash
+# ENVIRONNEMENT COMPLET, sans envoyer de données (≈8 min, ~0,01 €)
+#   bucket + dataset + Firehose + EC2/Kafka + job Glue + Step Functions + Athena
+make aws-env-full
+# équivalent : python -u -m infra.aws.ingest_all --full-setup
+
 # tout en un : instance + Kafka + dépendances + producteur + pont (≈7 min)
 make kafka-all
 
@@ -133,6 +138,27 @@ make aws-firehose-down
 l'instance via **SSM** (`run_script`), donc ni SSH ni clé. Sur l'EC2, la variable
 `SAGEMAKER_ROLE_ARN` n'est pas nécessaire — `firehose_direct._role()` retombe sur
 `LabRole` du compte courant.
+
+### Ce que `make aws-env-full` crée, et ce qu'il laisse à faire
+
+| Créé | Pour tester ensuite |
+|---|---|
+bucket `raw/ historique curated models forecast reports code` | S3 dans la console |
+`raw/historique/sales.parquet` (876 000 lignes) | — |
+Firehose `retail-sales-direct` (DirectPut) | bouton **Test with demo data** |
+EC2 `t3.medium` + Kafka `sales.events` (3 partitions) | Session Manager : `producer` + `kafka_to_firehose` |
+dépôt `/opt/retail` + `pip install -e` sur l'instance | les deux commandes affichées en fin de sortie |
+job Glue `retail-etl-raw-to-curated` | onglet **Run** |
+machine `retail-forecast-pipeline` (+ Lambda gate) | **Start execution** `{"run_id": "…"}` |
+Athena : base `retail_forecast`, tables `curated_sales` / `forecast` | query editor |
+
+Non créé volontairement : **règle EventBridge** (une exécution planifiée coûte
+~0,16 € par déclenchement) et **endpoint LLM** (`make sagemaker-deploy` / démarrage
+à la demande). L'endpoint serverless du modèle, lui, se crée avec
+`make sagemaker-deploy`.
+
+La sortie se termine par un résumé et les commandes exactes à coller dans Session
+Manager, avec l'IP privée de l'instance.
 
 ## 4. Points de conception
 

@@ -8,7 +8,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (86 tests, ~1 s, aucun service externe requis) |
+| `make test` | pytest (87 tests, ~1 s, aucun service externe requis) |
 | `make train` | entraînement complet LightGBM → `reports/local_baseline.json`, `data/forecast/` |
 | `make train-quick` | même chose sur 15 % des lignes (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |
@@ -25,6 +25,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 | `make sagemaker-deploy` | endpoint serverless du modèle approuvé (0 € au repos) |
 | `make sagemaker-transform` | Batch Transform → `forecast/` |
 | `make athena` | tables externes + 2 KPI SQL |
+| `make aws-env-full` | environnement AWS complet (ingestion + Glue + Step Functions + Athena), 0 donnée envoyée |
 | `make dashboard` | Streamlit :8501 |
 | `make brief` | rapport hebdo Ollama → `reports/` + S3 |
 | `make lettre` | régénère `docs/lettre_motivation.pdf` (pdflatex, nécessite texlive) |
