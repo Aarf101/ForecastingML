@@ -414,7 +414,7 @@ qui se résume à « lire des agrégats et écrire un paragraphe ». Le périmè
 
 ```bash
 cp .env.example .env && make setup && make data     # données locales
-make test                                           # 82 tests, ~1 s
+make test                                           # 83 tests, ~1 s
 make up && make produce && make consume             # Kafka local -> S3 local
 make aws-setup                                      # bucket S3 + historique
 make etl                                            # raw/ -> curated/

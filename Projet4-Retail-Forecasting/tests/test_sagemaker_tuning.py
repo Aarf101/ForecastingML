@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import tarfile
 
@@ -110,6 +111,23 @@ def test_evaluate_entry_fails_without_archive(tmp_path, monkeypatch):
     monkeypatch.setattr(evaluate_entry, "OUTPUT", tmp_path / "out")
     with pytest.raises(SystemExit):
         evaluate_entry.main()
+
+
+def test_boto_session_falls_back_when_profile_missing(monkeypatch):
+    """Sur le notebook du lab il n'y a pas de profil AWS : repli sur le rôle IAM."""
+    pytest.importorskip("sagemaker")
+    from dataclasses import replace
+
+    from infra.sagemaker import pipeline as pl
+
+    monkeypatch.setenv("AWS_PROFILE", "profil-inexistant-lab")
+    monkeypatch.setattr(pl, "SETTINGS", replace(pl.SETTINGS, profile="profil-inexistant-lab"))
+
+    session = pl._boto_session()
+
+    assert session.region_name == pl.SETTINGS.region
+    # La variable doit disparaître, sinon botocore la relit et re-échoue.
+    assert "AWS_PROFILE" not in os.environ
 
 
 def test_pipeline_definition_graph():

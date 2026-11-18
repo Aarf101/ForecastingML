@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -66,14 +67,40 @@ def _require_sdk():
         ) from exc
 
 
+def _boto_session():
+    """Session boto3 : profil ``.env`` si présent, sinon chaîne par défaut.
+
+    Sur le poste on passe par ``AWS_PROFILE=lab`` ; **sur l'instance SageMaker du
+    Learner Lab il n'existe aucun profil** (les identifiants viennent du rôle
+    IAM). Sans ce repli, ``pipeline.py`` lèverait ``ProfileNotFound`` dans le
+    notebook, alors que tous les autres modules (boto3.client sans profil)
+    fonctionnent.
+    """
+    import boto3
+    from botocore.exceptions import ProfileNotFound
+
+    if SETTINGS.profile:
+        try:
+            return boto3.Session(
+                profile_name=SETTINGS.profile, region_name=SETTINGS.region
+            )
+        except ProfileNotFound:
+            print(
+                f"[pipeline] profil '{SETTINGS.profile}' absent -> chaîne par "
+                "défaut (rôle IAM de l'instance)",
+                flush=True,
+            )
+            # Sans ça, botocore relit AWS_PROFILE dans l'environnement et lève
+            # de nouveau ProfileNotFound : la variable doit disparaître.
+            os.environ.pop("AWS_PROFILE", None)
+    return boto3.Session(region_name=SETTINGS.region)
+
+
 def _session():
     """PipelineSession : les ``.fit()`` n'envoient rien, ils décrivent des steps."""
-    import boto3
     from sagemaker.workflow.pipeline_context import PipelineSession
 
-    boto_sess = boto3.Session(
-        profile_name=SETTINGS.profile or None, region_name=SETTINGS.region
-    )
+    boto_sess = _boto_session()
     # default_bucket = le bucket du projet : sinon le SDK tenterait de créer
     # ``sagemaker-<région>-<compte>``, ce que le lab n'autorise pas.
     return PipelineSession(boto_session=boto_sess, default_bucket=SETTINGS.bucket)
@@ -222,6 +249,57 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
     )
 
 
+def check_env() -> int:
+    """Vérifie les pré-requis du Learner Lab avant de dépenser quoi que ce soit.
+
+    Contrôle : identité, bucket (lecture + écriture), lecture des pipelines, et
+    existence du groupe de registre. L'écriture ``CreatePipeline`` n'est pas
+    testable sans créer un pipeline : elle est tentée à l'``--upsert``.
+    """
+    from botocore.exceptions import ClientError
+
+    session = _boto_session()
+    ok = True
+
+    ident = session.client("sts").get_caller_identity()
+    print(f"[check] compte {ident['Account']} · {ident['Arn']}")
+
+    s3 = session.client("s3")
+    try:
+        s3.put_object(Bucket=SETTINGS.bucket, Key="code/.check", Body=b"ok")
+        print(f"[check] bucket {SETTINGS.bucket} : écriture OK")
+    except ClientError as exc:
+        ok = False
+        print(f"[check] bucket {SETTINGS.bucket} : ECHEC {exc.response['Error']['Code']}")
+
+    sm = session.client("sagemaker")
+    for label, appel in (
+        ("sagemaker:ListPipelines", lambda: sm.list_pipelines(MaxResults=1)),
+        ("sagemaker:ListModelPackages",
+         lambda: sm.list_model_packages(
+             ModelPackageGroupName=MODEL_GROUP, MaxResults=1)),
+    ):
+        try:
+            appel()
+            print(f"[check] {label} : lecture OK")
+        except ClientError as exc:
+            ok = False
+            print(f"[check] {label} : ECHEC {exc.response['Error']['Code']}")
+
+    nom_role = SETTINGS.role_arn.rsplit("/", 1)[-1]
+    try:
+        session.client("iam").get_role(RoleName=nom_role)
+        print(f"[check] rôle {nom_role} : lisible")
+    except ClientError as exc:
+        ok = False
+        print(f"[check] rôle {nom_role} : ECHEC {exc.response['Error']['Code']}")
+
+    print("[check] " + ("prêt pour --upsert" if ok else "corriger les lignes ECHEC"))
+    print("[check] note : sagemaker:CreatePipeline ne sera réellement testé "
+          "qu'au premier --upsert")
+    return 0 if ok else 1
+
+
 def wait_execution(sm, arn: str, poll: int = 30) -> dict:
     """Suit l'exécution et affiche l'état des étapes (dédupliqué par nom)."""
     while True:
@@ -254,12 +332,17 @@ def main(argv: list[str] | None = None) -> int:
                         help="attend la fin de l'exécution")
     parser.add_argument("--status", action="store_true",
                         help="affiche les dernières exécutions")
+    parser.add_argument("--check", action="store_true",
+                        help="vérifie les pré-requis du lab (bucket, IAM, registre)")
     args = parser.parse_args(argv)
 
     if not SETTINGS.bucket or not SETTINGS.role_arn:
         raise SystemExit(
             "S3_BUCKET et SAGEMAKER_ROLE_ARN doivent être renseignés (.env)"
         )
+
+    if args.check:
+        return check_env()
 
     if args.status:
         sm = _sm_client()
@@ -288,10 +371,21 @@ def main(argv: list[str] | None = None) -> int:
         print("[pipeline] rien à faire : préciser --upsert, --run ou --status")
         return 0
 
-    response = pipeline.upsert(
-        role_arn=SETTINGS.role_arn,
-        description="Prevision de la demande J+1..J+28 (LightGBM, gate WAPE).",
-    )
+    from botocore.exceptions import ClientError
+
+    try:
+        response = pipeline.upsert(
+            role_arn=SETTINGS.role_arn,
+            description="Prevision de la demande J+1..J+28 (LightGBM, gate WAPE).",
+        )
+    except ClientError as exc:
+        code = exc.response["Error"]["Code"]
+        print(f"[pipeline] upsert refusé : {code}")
+        if code in ("AccessDenied", "AccessDeniedException", "UnauthorizedOperation"):
+            print("[pipeline] le compte n'autorise pas sagemaker:CreatePipeline.")
+            print("[pipeline] repli : la partie ML reste couverte par Step Functions")
+            print("           make aws-pipeline-run   (train -> gate -> registry)")
+        return 1
     print(f"[pipeline] {PIPELINE_NAME} enregistré : {response['PipelineArn']}")
 
     if not args.run:

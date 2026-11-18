@@ -8,7 +8,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (82 tests, ~1 s, aucun service externe requis) |
+| `make test` | pytest (83 tests, ~1 s, aucun service externe requis) |
 | `make train` | entraînement complet LightGBM → `reports/local_baseline.json`, `data/forecast/` |
 | `make train-quick` | même chose sur 15 % des lignes (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |

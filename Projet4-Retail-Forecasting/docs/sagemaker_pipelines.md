@@ -47,6 +47,7 @@ et mauvais à J+28 ne doit pas passer le gate sur la foi du seul horizon 1.
 make sagemaker-tune                     # = python -m infra.sagemaker.tuning --wait
 
 # 2. pipeline : création (upsert) puis exécution
+make sagemaker-pipeline-check           # pré-requis lab, 0 €
 make sagemaker-pipeline                 # --upsert
 make sagemaker-pipeline-run             # --run --wait
 make sagemaker-pipeline-status          # 5 dernières exécutions
@@ -73,6 +74,38 @@ Dépendance | `pip install 'sagemaker>=2.214,<3'` — la v3 a déplacé l'API de
 Bucket par défaut | forcé sur `S3_BUCKET` (`PipelineSession(default_bucket=…)`) : sinon le SDK tenterait de créer `sagemaker-<région>-<compte>` |
 Code uploadé | construire la définition **uploade** `sourcedir.tar.gz` et `evaluate_entry.py` : il faut donc une session valide, même pour `--dry-run` |
 Permission à vérifier | `sagemaker:CreatePipeline` — si `AccessDenied`, replier sur Step Functions (déjà en place) |
+
+### Où l'exécuter (et le piège du profil)
+
+| Contexte | Identifiants | Remarque |
+|---|---|---|
+Poste | profil `lab` (`~/.aws/credentials`) | `.env` contient `AWS_PROFILE=lab` |
+**Notebook SageMaker** | rôle IAM de l'instance | **aucun profil `lab`** sur l'instance : `pipeline.py` détecte l'absence et retombe sur la chaîne boto3 par défaut (message `profil 'lab' absent -> chaîne par défaut`) |
+
+Sans ce repli, `make sagemaker-pipeline` lancé depuis le notebook échouerait en
+`ProfileNotFound` alors que tous les autres modules fonctionnent — c'est corrigé.
+
+### Vérification avant dépense (`--check`, 0 €)
+
+```bash
+make sagemaker-pipeline-check      # = python -m infra.sagemaker.pipeline --check
+```
+
+Contrôle en quelques secondes : identité STS, écriture dans le bucket, lecture des
+pipelines, existence du groupe `retail-forecast-lgbm`, lisibilité de `LabRole`.
+Sortie attendue :
+
+```
+[check] compte 654654161593 · arn:aws:sts::654654161593:assumed-role/voclabs/…
+[check] bucket retail-forecast-654654161593-ayoub : écriture OK
+[check] sagemaker:ListPipelines : lecture OK
+[check] sagemaker:ListModelPackages : lecture OK
+[check] rôle LabRole : lisible
+[check] prêt pour --upsert
+```
+
+La lecture ne prouve pas `CreatePipeline` : l'`--upsert` est le seul vrai test, et
+il affiche un repli explicite vers Step Functions s'il est refusé.
 
 ## Coût
 

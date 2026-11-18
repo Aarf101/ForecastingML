@@ -63,6 +63,7 @@ help:
 	@echo "make sagemaker-tune   HyperParameter Tuning Job (6 essais, gate WAPE)"
 	@echo "make sagemaker-pipeline      SageMaker Pipeline (train -> eval -> gate -> registry)"
 	@echo "make sagemaker-pipeline-run  execute le pipeline et attend la fin"
+	@echo "make sagemaker-pipeline-check verifie les prerequis du lab (0 EUR)"
 	@echo "make athena       tables externes + KPI SQL"
 	@echo "make dashboard    Streamlit :8501 (prevu vs realise)"
 	@echo "make brief        rapport hebdo redige par Ollama"
@@ -150,6 +151,9 @@ sagemaker-pipeline-run:
 
 sagemaker-pipeline-status:
 	$(PY) -m infra.sagemaker.pipeline --status
+
+sagemaker-pipeline-check:
+	$(PY) -m infra.sagemaker.pipeline --check
 
 athena:
 	$(PY) -m infra.athena.setup
