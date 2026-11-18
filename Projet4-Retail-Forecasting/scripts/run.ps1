@@ -28,7 +28,8 @@ param(
         'aws-upload-repo', 'aws-teardown',
         'sagemaker-train', 'sagemaker-register', 'sagemaker-transform',
         'sagemaker-tune', 'sagemaker-pipeline', 'sagemaker-pipeline-run',
-        'sagemaker-pipeline-status'
+        'sagemaker-pipeline-status', 'sagemaker-deploy',
+        'sagemaker-deploy-invoke', 'sagemaker-deploy-down'
     )]
     [string]$Task = 'help'
 )
@@ -145,4 +146,7 @@ Les scripts .sh (make up / produce / consume) nécessitent Git Bash ou WSL.
     'sagemaker-pipeline'         { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--upsert') }
     'sagemaker-pipeline-run'     { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--run', '--wait') }
     'sagemaker-pipeline-status'  { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--status') }
+    'sagemaker-deploy'           { Invoke-Py @('-m', 'infra.sagemaker.deploy', 'up') }
+    'sagemaker-deploy-invoke'    { Invoke-Py @('-m', 'infra.sagemaker.deploy', 'invoke') }
+    'sagemaker-deploy-down'      { Invoke-Py @('-m', 'infra.sagemaker.deploy', 'down') }
 }

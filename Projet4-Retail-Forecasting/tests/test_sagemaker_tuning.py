@@ -41,14 +41,16 @@ SUMMARY = {
 
 
 def test_tuning_request_structure():
-    """La requête cible le WAPE en minimisation avec les bonnes paires de paramètres."""
+    """La requête cible le WAPE de validation en minimisation, pas le test."""
     req = tuning.tuning_request("bucket-test", "hpo-1", "s3://bucket-test/code/x.gz",
                                 max_jobs=4, parallel=1, strategy="Random")
     config = req["HyperParameterTuningJobConfig"]
     assert config["HyperParameterTuningJobObjective"] == {
         "Type": "Minimize",
-        "MetricName": "test_wape",
+        "MetricName": "valid_wape",
     }
+    # Garde-fou méthodologique : optimiser sur le test serait une fuite.
+    assert config["HyperParameterTuningJobObjective"]["MetricName"] != "test_wape"
     assert config["ResourceLimits"] == {
         "MaxNumberOfTrainingJobs": 4,
         "MaxParallelTrainingJobs": 1,
@@ -77,10 +79,12 @@ def test_tuning_request_reads_same_code_and_data_as_launch():
 
 def test_metric_regex_matches_entry_log_line():
     """Le regex du tuning doit lire la ligne émise par train_entry.py."""
-    ligne = "[hpo] test_wape=0.429813"
+    ligne = "[hpo] valid_wape=0.429813"
     match = re.search(tuning.METRIC_REGEX, ligne)
     assert match is not None
     assert abs(float(match.group(1)) - 0.429813) < 1e-9
+    # La ligne de test ne doit pas être confondue avec l'objectif.
+    assert re.search(tuning.METRIC_REGEX, "[hpo] test_wape=0.390000") is None
 
 
 def test_evaluate_entry_writes_regression_metrics(tmp_path, monkeypatch):
@@ -111,6 +115,38 @@ def test_evaluate_entry_fails_without_archive(tmp_path, monkeypatch):
     monkeypatch.setattr(evaluate_entry, "OUTPUT", tmp_path / "out")
     with pytest.raises(SystemExit):
         evaluate_entry.main()
+
+
+def test_evaluate_entry_flags_artifact_fallback(tmp_path, monkeypatch):
+    """Sans données montées, le rapport doit dire qu'il n'est pas indépendant."""
+    entree = tmp_path / "in"
+    entree.mkdir()
+    _fake_model_tar(entree, SUMMARY)
+    monkeypatch.setattr(evaluate_entry, "INPUT", entree)
+    monkeypatch.setattr(evaluate_entry, "CURATED", tmp_path / "pas-de-donnees")
+    monkeypatch.setattr(evaluate_entry, "CODE", tmp_path / "pas-de-code")
+    monkeypatch.setattr(evaluate_entry, "OUTPUT", tmp_path / "out")
+
+    assert evaluate_entry.main() == 0
+    rapport = json.loads((tmp_path / "out" / "evaluation.json").read_text())
+    assert rapport["independent"] is False
+    assert rapport["source"] == "artifact"
+
+
+def test_gate_decision_uses_mean_wape_and_falls_back():
+    """Les deux gates (Lambda et pipeline) comparent la même grandeur."""
+    from infra.sagemaker.register import gate_decision
+
+    # mean_wape prioritaire : 0,44 <= 0,45 alors que l'horizon 1 ferait pareil,
+    # mais 0,50 > 0,45 doit bloquer malgré un h=1 flatteur.
+    wape, approuve, statut = gate_decision(
+        {"mean_wape": 0.50, "test_wape": 0.39}, 0.45
+    )
+    assert (wape, approuve, statut) == (0.50, False, "PendingManualApproval")
+
+    # artefact ancien, sans mean_wape -> repli sur test_wape
+    wape, approuve, statut = gate_decision({"test_wape": 0.43}, 0.45)
+    assert (wape, approuve, statut) == (0.43, True, "Approved")
 
 
 def test_boto_session_falls_back_when_profile_missing(monkeypatch):
@@ -147,7 +183,12 @@ def test_pipeline_definition_graph():
     fake_code = UploadedCode(
         s3_prefix="s3://b/code/sourcedir.tar.gz", script_name="train_entry.py"
     )
-    with mock.patch.object(
+    with mock.patch(
+        "infra.sagemaker.launch.upload_code",
+        lambda client, bucket: "s3://b/code/sourcedir.tar.gz",
+    ), mock.patch(
+        "infra.sagemaker.pipeline.s3_client", lambda: None
+    ), mock.patch.object(
         sp.ScriptProcessor, "_upload_code",
         lambda self, code, kms_key=None: "s3://b/code/evaluate_entry.py",
     ), mock.patch.object(

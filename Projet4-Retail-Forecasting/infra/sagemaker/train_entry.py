@@ -128,6 +128,9 @@ def main() -> int:
             lgb.LGBMRegressor(**params), X_tr, y_tr, X_va, y_va, args.early_stopping_rounds
         )
         pred = np.clip(model.predict(X_te), 0, None)
+        # WAPE de validation : c'est la mesure qui sert à choisir les
+        # hyperparamètres. Le test ne doit servir qu'à juger, une seule fois.
+        pred_va = np.clip(model.predict(X_va), 0, None)
         base_pred = np.clip(seasonal_naive(test), 0, None)
         base_wape = wape(y_te, base_pred)
 
@@ -137,6 +140,7 @@ def main() -> int:
             "n_test": int(len(test)),
             "n_features": len(features),
             "best_iteration": int(model.best_iteration_ or args.n_estimators),
+            "valid_wape": wape(y_va, pred_va),
             "test_wape": wape(y_te, pred),
             "test_rmse": rmse(y_te, pred),
             "test_bias": bias(y_te, pred),
@@ -146,8 +150,9 @@ def main() -> int:
         by_horizon[str(horizon)] = metrics
         model.booster_.save_model(str(model_dir / f"model_{horizon}.txt"))
         print(
-            f"[entry] h={horizon:>2}j  WAPE {metrics['test_wape']:.4f}"
-            f" (baseline {base_wape:.4f}, gain {metrics['improvement_vs_baseline']:+.1%})"
+            f"[entry] h={horizon:>2}j  WAPE test {metrics['test_wape']:.4f}"
+            f" (valid {metrics['valid_wape']:.4f}, baseline {base_wape:.4f},"
+            f" gain {metrics['improvement_vs_baseline']:+.1%})"
         )
 
     # Le handler d'inférence doit voyager DANS l'artefact (Batch Transform).
@@ -175,9 +180,13 @@ def main() -> int:
     )
 
     # Résumé à plat (horizon principal = le premier) pour le Model Registry.
+    wapes = [m["test_wape"] for m in by_horizon.values()]
     summary = {
         "horizons": horizons,
         "by_horizon": by_horizon,
+        # WAPE moyen des horizons : c'est la valeur que compare le gate (le
+        # modèle doit tenir sur tout l'horizon, pas seulement à J+1).
+        "mean_wape": sum(wapes) / len(wapes),
         **by_horizon[str(horizons[0])],
     }
     (model_dir / "metrics.json").write_text(json.dumps(summary, indent=2, default=float))
@@ -189,10 +198,12 @@ def main() -> int:
         "[entry] resume "
         + json.dumps({h: round(m["test_wape"], 4) for h, m in by_horizon.items()})
     )
-    # Ligne dédiée au HyperParameter Tuning Job : la métrique d'objectif doit
+    # Lignes dédiées au HyperParameter Tuning Job : la métrique d'objectif doit
     # apparaître UNE seule fois dans les journaux (le regex CloudWatch ne lit
-    # qu'une valeur par événement). Elle porte sur l'horizon principal.
+    # qu'une valeur par événement). L'objectif est la validation ; le test n'est
+    # publié que pour information.
     primary = by_horizon[str(horizons[0])]
+    print(f"[hpo] valid_wape={primary['valid_wape']:.6f}")
     print(f"[hpo] test_wape={primary['test_wape']:.6f}")
     return 0
 

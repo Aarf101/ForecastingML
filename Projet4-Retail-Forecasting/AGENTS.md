@@ -8,7 +8,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (83 tests, ~1 s, aucun service externe requis) |
+| `make test` | pytest (85 tests, ~1 s, aucun service externe requis) |
 | `make train` | entraînement complet LightGBM → `reports/local_baseline.json`, `data/forecast/` |
 | `make train-quick` | même chose sur 15 % des lignes (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |
@@ -22,6 +22,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 | `make sagemaker-tune` | HyperParameter Tuning Job (6 essais, objectif `test_wape`) |
 | `make sagemaker-pipeline` | SageMaker Pipeline `retail-forecast-mlops` (upsert) |
 | `make sagemaker-pipeline-run` | exécute le pipeline et attend (train → eval → gate → registry) |
+| `make sagemaker-deploy` | endpoint serverless du modèle approuvé (0 € au repos) |
 | `make sagemaker-transform` | Batch Transform → `forecast/` |
 | `make athena` | tables externes + 2 KPI SQL |
 | `make dashboard` | Streamlit :8501 |
@@ -56,6 +57,7 @@ infra/sagemaker/
   tuning.py            HyperParameter Tuning Job (objectif = test_wape, regex logs)
   evaluate_entry.py    étape Processing : artefact -> evaluation.json (gate WAPE)
   pipeline.py          SageMaker Pipeline (train -> eval -> gate -> registry)
+  deploy.py            endpoint serverless du modele approuve (up/invoke/down)
   register.py          Model Registry (gate WAPE_THRESHOLD -> Approved)
 docs/  architecture.md (doc de référence), learner_lab.md (accès au compte AWS),
        windows.md (poste Windows : run.ps1, Git Bash, WSL), script.md (script oral),
@@ -90,8 +92,9 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
   (`WAPE_THRESHOLD=0.45` ; la v1 montre le fonctionnement du gate)
 - ✅ Phase 4c Batch Transform → `forecast/table/forecast.parquet` (4 800 lignes,
   4 horizons) · `inference.py` + `SAGEMAKER_REQUIREMENTS` dans l'artefact
-- 🟡 Phase 4d **tuning** (`tuning.py`) + **SageMaker Pipelines** (`pipeline.py`) :
-  code + 5 tests unitaires en place, exécution AWS à faire (voir
+- 🟡 Phase 4d **tuning** (`tuning.py`, objectif = WAPE de validation) + **SageMaker
+  Pipelines** (`pipeline.py`, éval indépendante) + **endpoint serverless**
+  (`deploy.py`) : code + 9 tests unitaires en place, exécution AWS à faire (voir
   `docs/sagemaker_pipelines.md`)
 - ✅ Athena : base `retail_forecast`, tables `curated_sales` / `forecast`, 2 KPI
 - ✅ Phase 6 dashboard Streamlit (`make dashboard`, S3 ou local)

@@ -50,6 +50,7 @@ from infra.sagemaker.launch import (
     build_tarball,
 )
 from retail_forecast.config import SETTINGS
+from retail_forecast.ingest.storage import s3_client
 
 PIPELINE_NAME = "retail-forecast-mlops"
 MODEL_GROUP = "retail-forecast-lgbm"
@@ -127,20 +128,27 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
     _require_sdk()
     from sagemaker.inputs import TrainingInput
     from sagemaker.processing import ProcessingInput, ProcessingOutput, ScriptProcessor
+
     from sagemaker.sklearn.estimator import SKLearn
     from sagemaker.workflow.condition_step import ConditionStep
     from sagemaker.workflow.conditions import ConditionLessThanOrEqualTo
     from sagemaker.workflow.fail_step import FailStep
-    from sagemaker.workflow.functions import JsonGet
+    from sagemaker.workflow.functions import Join, JsonGet
     from sagemaker.workflow.parameters import ParameterFloat
     from sagemaker.workflow.pipeline import Pipeline
     from sagemaker.workflow.properties import PropertyFile
     from sagemaker.workflow.step_collections import RegisterModel
-    from sagemaker.workflow.steps import ProcessingStep, TrainingStep
+    from sagemaker.workflow.steps import CacheConfig, ProcessingStep, TrainingStep
 
     session = _session()
     bucket = SETTINGS.bucket
     role = SETTINGS.role_arn
+
+    # Le paquet du projet est déposé à une clé connue : l'étape d'évaluation le
+    # remonte pour réimporter ``retail_forecast`` (recalcul indépendant du WAPE).
+    from infra.sagemaker.launch import upload_code
+
+    code_uri = upload_code(s3_client(), bucket)
 
     seuil = ParameterFloat(name="WapeThreshold", default_value=threshold)
 
@@ -171,6 +179,10 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
                 content_type="application/x-parquet",
             )
         },
+        # Cache : si le code, les hyperparamètres et les données n'ont pas changé,
+        # SageMaker réutilise l'artefact précédent — pas de Training Job payé
+        # pour rien lors d'une deuxième démonstration.
+        cache_config=CacheConfig(enable_caching=True, expire_after="P14D"),
     )
 
     # 2) Évaluation — Processing Job. ScriptProcessor + image déjà validée dans
@@ -193,7 +205,19 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
             ProcessingInput(
                 source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
                 destination="/opt/ml/processing/input/model",
-            )
+            ),
+            # Données de test : c'est ce qui permet de RECALCULER le WAPE au lieu
+            # de recopier celui de l'entraîneur.
+            ProcessingInput(
+                source=f"s3://{bucket}/curated/",
+                destination="/opt/ml/processing/input/curated",
+            ),
+            # Paquet retail_forecast (features + métriques), même archive que
+            # celle utilisée par l'entraînement.
+            ProcessingInput(
+                source=code_uri,
+                destination="/opt/ml/processing/input/code",
+            ),
         ],
         outputs=[
             ProcessingOutput(
@@ -206,7 +230,20 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
         property_files=[rapport],
     )
 
-    # 3a) Gate OK -> enregistrement au registre (même groupe que register.py)
+    # 3a) Gate OK -> enregistrement au registre (même groupe que register.py).
+    #     Métadonnées attachées à la version : le SDK v2 n'expose pas de champ
+    #     « ModelQuality » dans ModelMetrics, on utilise donc les métadonnées
+    #     client (même mécanisme que register.py) et on pointe le rapport
+    #     d'évaluation produit par l'étape précédente.
+    qualite = Join(
+        on="/",
+        values=[
+            step_eval.properties.ProcessingOutputConfig.Outputs[
+                "evaluation"
+            ].S3Output.S3Uri,
+            "evaluation.json",
+        ],
+    )
     step_register = RegisterModel(
         name="RegisterApproved",
         estimator=estimator,
@@ -217,6 +254,14 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
         transform_instances=[INSTANCE],
         model_package_group_name=MODEL_GROUP,
         approval_status="Approved",
+        customer_metadata_properties={
+            "gate": f"mean_wape <= {threshold}",
+            "horizons": horizons,
+            "pipeline": PIPELINE_NAME,
+            # Valeurs statiques imposées par le format du step ; le WAPE chiffré
+            # est dans le rapport d'évaluation de l'exécution (sortie S3 ci-dessous).
+            "evaluation_prefix": f"s3://{bucket}/evaluation/",
+        },
     )
 
     # 3b) Gate KO -> échec explicite : rien n'est publié, l'exécution est rouge

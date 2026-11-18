@@ -45,8 +45,10 @@ from retail_forecast.ingest.storage import s3_client
 JOB_PREFIX = "retail-lgbm-hpo"
 
 # Métrique surveillée par le tuning (émise par train_entry.py, une seule fois).
-OBJECTIVE = "test_wape"
-METRIC_REGEX = r"\[hpo\] test_wape=([0-9\.]+)"
+# On optimise la **validation** : optimiser sur le test reviendrait à choisir les
+# hyperparamètres sur les données censées juger le modèle (fuite indirecte).
+OBJECTIVE = "valid_wape"
+METRIC_REGEX = r"\[hpo\] valid_wape=([0-9\.]+)"
 
 # Espace de recherche. Volontairement étroit : un espace trop large multiplie les
 # essais donc la facture, et LightGBM converge vite sur ce volume de données.

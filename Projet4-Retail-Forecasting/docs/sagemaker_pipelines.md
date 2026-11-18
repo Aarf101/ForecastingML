@@ -10,10 +10,18 @@ Ce document dit où en est chaque partie, et comment la montrer en démo.
 | Attendu | Implémenté | Fichier | Validé dans AWS |
 |---|---|---|---|
 Entraînement | ✅ Training Job `ml.m5.large`, conteneur SKLearn managé | `infra/sagemaker/launch.py` | ✅ `retail-lgbm-test2`, WAPE 0,4298 |
-**Tuning** | ✅ HyperParameter Tuning Job bayésien | `infra/sagemaker/tuning.py` | 🟡 code + tests (à lancer au prochain lab) |
-Déploiement | ✅ Batch Transform + Model Registry (gate WAPE) | `infra/sagemaker/batch_transform.py`, `register.py` | ✅ `forecast/table/forecast.parquet` |
+**Tuning** | ✅ HyperParameter Tuning Job bayésien, **objectif = WAPE de validation** | `infra/sagemaker/tuning.py` | 🟡 code + tests (à lancer au prochain lab) |
+**Déploiement** | ✅ endpoint **serverless** sur le modèle approuvé (+ Batch Transform pour le lot) | `infra/sagemaker/deploy.py`, `batch_transform.py` | 🟡 code + tests |
+Registre | ✅ gate WAPE partagé avec le pipeline, métadonnées sur la version | `infra/sagemaker/register.py` | ✅ v1→v4 |
 **SageMaker Pipelines** | ✅ Pipeline `retail-forecast-mlops` | `infra/sagemaker/pipeline.py` | 🟡 code + tests |
-Orchestration alternative | ✅ Step Functions (`retail-forecast-pipeline`) | `infra/aws/orchestrate.py` | ✅ exécution `test2` |
+Orchestration infra | ✅ Step Functions (`retail-forecast-pipeline`) | `infra/aws/orchestrate.py` | ✅ exécution `test2` |
+
+Pourquoi deux orchestrateurs, et pas un seul : Step Functions n'a pas d'intégration
+`.sync` pour `StartPipelineExecution` (contrairement à `CreateTrainingJob`), il
+faudrait une Lambda de polling. La séparation actuelle — Step Functions pour la
+chaîne infra (ingestion, ETL, déclenchements) et SageMaker Pipelines pour la
+partie ML — est donc le découpage le plus simple à maintenir ici. C'est une dette
+assumée : la partie ML existe en double (SFN + pipeline).
 
 Deux orchestrateurs coexistent volontairement :
 
@@ -26,10 +34,10 @@ Deux orchestrateurs coexistent volontairement :
 ## Le pipeline
 
 ```
-TrainLightGBM      Training Job (même image, même code que launch.py)
+TrainLightGBM      Training Job (même image, même code que launch.py) · cache 14 j
       │  s3://…/models/…/output/model.tar.gz
       ▼
-EvaluateModel      Processing Job (stdlib, lit metrics.json de l'artefact)
+EvaluateModel      Processing Job : RECALCULE le WAPE depuis curated/ + l'artefact
       │  evaluation.json -> regression_metrics.test_wape.value
       ▼
 GateWAPE           ConditionStep  (seuil = paramètre WapeThreshold)
@@ -37,8 +45,15 @@ GateWAPE           ConditionStep  (seuil = paramètre WapeThreshold)
       └── WAPE > seuil → WAPETropEleve     (FailStep : exécution rouge, rien de publié)
 ```
 
-L'évaluation moyenne le WAPE **sur les 4 horizons** : un modèle excellent à J+1
-et mauvais à J+28 ne doit pas passer le gate sur la foi du seul horizon 1.
+L'évaluation **recalcule** le WAPE : elle remonte `curated/` et le paquet du
+projet, reconstruit les features, recharge les boosters `model_<h>.txt` et prédit
+sur les 28 derniers jours. Elle publie aussi l'écart avec les métriques de
+l'artefact — ce qui prouve que le chiffre n'est pas recopié. Si le recalcul est
+impossible (dépendance manquante), elle republie l'artefact en le disant
+(`"independent": false`, `"source": "artifact"`), jamais en silence.
+
+Le gate porte sur le **WAPE moyen des 4 horizons**, comme `register.py` : un
+modèle bon à J+1 et mauvais à J+28 ne passe pas.
 
 ## Commandes
 
@@ -52,7 +67,10 @@ make sagemaker-pipeline                 # --upsert
 make sagemaker-pipeline-run             # --run --wait
 make sagemaker-pipeline-status          # 5 dernières exécutions
 
-# 3. déploiement (hors pipeline, comme documenté)
+# 3. déploiement : endpoint serverless (~0 € au repos) + lot
+make sagemaker-deploy                   # crée le modèle + l'endpoint (1-5 min)
+make sagemaker-deploy-invoke            # 4 prévisions J+1..J+28 (preuve « déploiement »)
+make sagemaker-deploy-down              # supprime tout -> facturation 0
 make sagemaker-transform                # Batch Transform -> forecast/table/
 make athena                             # KPI SQL sur les prévisions
 ```
@@ -112,21 +130,27 @@ il affiche un repli explicite vers Step Functions s'il est refusé.
 | Action | Durée | Coût |
 |---|---|---|
 Tuning 6 essais × 1 horizon | ~18 min | ~0,03 € |
-Pipeline complet (training 4 horizons + processing) | ~8 min | ~0,02 € |
+Pipeline complet (training 4 horizons + processing) | ~8-10 min | ~0,02 € |
+Endpoint serverless au repos | — | ~0 € (facturé à l'inférence, ms) |
+`deploy invoke` (4 prévisions) | ~2 s | < 0,001 € |
 Batch Transform | ~6 min | ~0,01 € |
 
 Garde-fous : `MaxRuntimeInSeconds=1200` par job, `MaxParallelTrainingJobs=1`,
-`TrainingJobEarlyStoppingType=Auto` (les essais sans progrès s'arrêtent).
+`TrainingJobEarlyStoppingType=Auto` (les essais sans progrès s'arrêtent),
+cache 14 j sur l'entraînement, `make sagemaker-deploy-down` pour repasser à 0.
 
 ## Choix techniques à savoir justifier
 
 | Choix | Raison |
 |---|---|
-`train_entry.py` émet `[hpo] test_wape=…` | le tuning lit la métrique dans CloudWatch via regex ; il faut **une seule** occurrence par événement de log |
+`train_entry.py` émet `[hpo] valid_wape=…` et `[hpo] test_wape=…` | le tuning lit la métrique dans CloudWatch via regex (une seule occurrence par événement) ; l'objectif est la validation, le test reste le juge |
 Options argparse en double (`--learning-rate` / `--learning_rate`) | le tuning transmet le nom du paramètre tel quel ; le tiret ne doit pas faire échouer l'essai |
 `ScriptProcessor(image_uri=IMAGE)` | évite la résolution d'image « processing » par version : on réutilise l'image déjà validée dans ce compte |
-`EvaluateModel` sans LightGBM | l'étape lit `metrics.json` de l'artefact : aucune dépendance lourde, démarrage rapide |
+`EvaluateModel` recalcule, avec repli | le conteneur SKLearn n'a pas LightGBM : le script l'installe (`pip`) puis recalcule ; en cas d'échec il republie l'artefact en le signalant (`independent: false`) |
+Métadonnées statiques sur la version du registre | le SDK v2 n'expose pas `ModelQuality` dans `ModelMetrics` ; on écrit les métadonnées client et on pointe le rapport d'évaluation |
+Endpoint **serverless** | `ml.m5.large` coûte ~0,11 €/h même sans trafic ; le serverless facture à la milliseconde et retombe à zéro |
 Batch Transform hors pipeline | il dépend de données d'inférence préparées ; le garder dehors évite de payer une instance à chaque exécution |
+Cache 14 j sur `TrainLightGBM` | une deuxième démonstration ne repaie pas l'entraînement si rien n'a changé |
 
 ## Ce qui n'est pas fait (et pourquoi)
 
@@ -135,4 +159,5 @@ Batch Transform hors pipeline | il dépend de données d'inférence préparées 
 Model Monitor | facturation horaire, hors périmètre du sujet |
 TransformStep dans le pipeline | nécessite un `Model` construit depuis le package registré ; `batch_transform.py` couvre déjà le besoin |
 CloudFormation du pipeline | `cloudformation:*` refusé dans le lab |
-Endpoint temps réel | le sujet parle de « déploiement », Batch Transform suffit pour du J+1…J+28 |
+Step Functions → `StartPipelineExecution` | pas d'intégration `.sync` pour les pipelines : il faudrait une Lambda de polling |
+Model Metrics chiffré dans le registre via le pipeline | `ModelMetrics` v2 n'a pas de champ quality ; `register.py` (Lambda) le fait, lui, à l'exécution |

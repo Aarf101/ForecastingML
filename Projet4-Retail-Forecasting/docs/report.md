@@ -271,10 +271,12 @@ devenu faux. C'est la deuxième fuite évitée.
 L'optimisation d'hyperparamètres (HPO) est **implémentée** dans
 `infra/sagemaker/tuning.py` : un HyperParameter Tuning Job bayésien explore
 `learning-rate` (0,01–0,2, échelle logarithmique), `num-leaves` (15–127) et
-`n-estimators` (150–600), avec pour objectif la minimisation du WAPE de test lu
-dans les journaux du conteneur (ligne `[hpo] test_wape=…`). Six essais coûtent
-~0,03 € ; l'exécution reste à faire, les valeurs du tableau ci-dessus étant
-celles du réglage manuel validé (WAPE 0,4298 côté cloud).
+`n-estimators` (150–600). L'objectif est le **WAPE de validation** — optimiser sur
+le test reviendrait à choisir les hyperparamètres sur les données censées juger le
+modèle. La métrique est lue dans les journaux du conteneur (ligne
+`[hpo] valid_wape=…`, émise une seule fois). Six essais coûtent ~0,03 € ;
+l'exécution reste à faire, les valeurs du tableau ci-dessus étant celles du
+réglage manuel validé (WAPE 0,4298 côté cloud).
 
 ### 4.3 bis SageMaker Pipelines
 
@@ -286,13 +288,23 @@ TrainLightGBM → EvaluateModel → GateWAPE ─┬─ WAPE ≤ seuil → Regist
                                           └─ WAPE > seuil → WAPETropEleve (échec)
 ```
 
-`EvaluateModel` est un Processing Job qui lit `model.tar.gz`, moyenne le WAPE sur
-les quatre horizons et publie `evaluation.json` au format
-`regression_metrics` ; la condition `GateWAPE` lit ce fichier, exactement comme la
-Lambda `retail-register-model` le fait dans la chaîne Step Functions. Deux
-orchestrateurs coexistent donc : Step Functions pour la chaîne complète
-(ingestion → ETL → ML → publication) et SageMaker Pipelines pour la partie ML,
-conformément à la demande du sujet. Détails : `docs/sagemaker_pipelines.md`.
+`EvaluateModel` est un Processing Job qui **recalcule** le WAPE : il remonte
+`curated/` et le paquet du projet, reconstruit les features, recharge les boosters
+`model_<h>.txt` et prédit sur les 28 derniers jours, puis publie `evaluation.json`
+au format `regression_metrics` avec l'écart par rapport aux métriques de
+l'artefact. Si le recalcul est impossible, le rapport porte `"independent": false`
+plutôt que de faire passer une copie pour une mesure. La condition `GateWAPE` lit
+ce fichier, sur le **WAPE moyen des quatre horizons** — la même grandeur que la
+Lambda `retail-register-model`. Deux orchestrateurs coexistent donc : Step
+Functions pour la chaîne complète (ingestion → ETL → ML → publication) et
+SageMaker Pipelines pour la partie ML, conformément à la demande du sujet.
+Détails : `docs/sagemaker_pipelines.md`.
+
+Le **déploiement** est double : Batch Transform pour les prévisions de masse, et
+un endpoint **serverless** (`infra/sagemaker/deploy.py`, 2 Go, concurrence 2) qui
+sert le modèle approuvé du registre et répond en quelques centaines de
+millisecondes. Le serveur ne coûte rien au repos — c'est ce qui le rend
+compatible avec un Learner Lab à budget fermé.
 
 ### 4.4 Résultats
 
@@ -414,7 +426,7 @@ qui se résume à « lire des agrégats et écrire un paragraphe ». Le périmè
 
 ```bash
 cp .env.example .env && make setup && make data     # données locales
-make test                                           # 83 tests, ~1 s
+make test                                           # 85 tests, ~1 s
 make up && make produce && make consume             # Kafka local -> S3 local
 make aws-setup                                      # bucket S3 + historique
 make etl                                            # raw/ -> curated/
@@ -422,6 +434,9 @@ make sagemaker-train                                # Training Job (~0,01 €)
 make sagemaker-tune                                 # HyperParameter Tuning (~0,03 €)
 make sagemaker-pipeline                             # SageMaker Pipeline (upsert)
 make sagemaker-pipeline-run                         # exécution + gate WAPE
+make sagemaker-deploy                               # endpoint serverless (0 € au repos)
+make sagemaker-deploy-invoke                        # 4 prévisions J+1..J+28
+make sagemaker-deploy-down                          # supprime l'endpoint
 make sagemaker-register                             # Model Registry (gate WAPE)
 make sagemaker-transform                            # forecast/ (~0,01 €)
 make athena                                         # tables + KPI

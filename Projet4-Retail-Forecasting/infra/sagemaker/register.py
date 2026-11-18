@@ -47,6 +47,18 @@ def latest_completed_job(sm) -> str:
     return jobs[0]["TrainingJobName"]
 
 
+def gate_decision(metrics: dict, threshold: float) -> tuple[float, bool, str]:
+    """Décide de l'approbation : WAPE moyen des horizons comparé au seuil.
+
+    Même grandeur que la condition ``GateWAPE`` du pipeline SageMaker. Les
+    artefacts antérieurs à l'ajout de ``mean_wape`` retombent sur le WAPE de
+    l'horizon principal.
+    """
+    wape_gate = metrics.get("mean_wape", metrics["test_wape"])
+    approuve = wape_gate <= threshold
+    return wape_gate, approuve, "Approved" if approuve else "PendingManualApproval"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Registry : enregistre le modèle.")
     parser.add_argument("--job", default="", help="Training Job à enregistrer")
@@ -57,8 +69,10 @@ def main(argv: list[str] | None = None) -> int:
     job = args.job or latest_completed_job(sm)
     metrics = read_metrics(s3_client(), SETTINGS.bucket, job)
 
-    approved = metrics["test_wape"] <= args.threshold
-    status = "Approved" if approved else "PendingManualApproval"
+    # Même grandeur que le gate du pipeline SageMaker : le WAPE moyen des
+    # horizons s'il est présent (nouveaux artefacts), sinon celui de l'horizon
+    # principal (artefacts d'avant l'ajout de mean_wape).
+    gate_wape, approved, status = gate_decision(metrics, args.threshold)
     model_url = f"s3://{SETTINGS.bucket}/models/{job}/output/model.tar.gz"
 
     ensure_group(sm)
@@ -76,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         CustomerMetadataProperties={
             "training_job": job,
             "test_wape": f"{metrics['test_wape']:.4f}",
+            "mean_wape": f"{gate_wape:.4f}",
             "baseline_wape": f"{metrics['baseline_wape']:.4f}",
             "improvement": f"{metrics['improvement_vs_baseline']:.4f}",
             "test_bias": f"{metrics['test_bias']:+.4f}",
@@ -84,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     arn = response["ModelPackageArn"]
     print(f"[registry] version enregistrée ({status}) : {arn}")
-    print(f"[registry] WAPE {metrics['test_wape']:.4f} <= seuil {args.threshold} -> "
+    print(f"[registry] WAPE moyen {gate_wape:.4f} <= seuil {args.threshold} -> "
           f"{'approuvée' if approved else 'approbation manuelle requise'}")
     print("[registry] " + json.dumps({"model_data": model_url}, ensure_ascii=False))
     return 0

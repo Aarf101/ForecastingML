@@ -64,6 +64,9 @@ help:
 	@echo "make sagemaker-pipeline      SageMaker Pipeline (train -> eval -> gate -> registry)"
 	@echo "make sagemaker-pipeline-run  execute le pipeline et attend la fin"
 	@echo "make sagemaker-pipeline-check verifie les prerequis du lab (0 EUR)"
+	@echo "make sagemaker-deploy      endpoint serverless du modele approuve (0 EUR au repos)"
+	@echo "make sagemaker-deploy-invoke  4 previsions de demonstration (J+1..J+28)"
+	@echo "make sagemaker-deploy-down supprime l endpoint (facturation 0)"
 	@echo "make athena       tables externes + KPI SQL"
 	@echo "make dashboard    Streamlit :8501 (prevu vs realise)"
 	@echo "make brief        rapport hebdo redige par Ollama"
@@ -154,6 +157,15 @@ sagemaker-pipeline-status:
 
 sagemaker-pipeline-check:
 	$(PY) -m infra.sagemaker.pipeline --check
+
+sagemaker-deploy:
+	$(PY) -m infra.sagemaker.deploy up
+
+sagemaker-deploy-invoke:
+	$(PY) -m infra.sagemaker.deploy invoke
+
+sagemaker-deploy-down:
+	$(PY) -m infra.sagemaker.deploy down
 
 athena:
 	$(PY) -m infra.athena.setup
