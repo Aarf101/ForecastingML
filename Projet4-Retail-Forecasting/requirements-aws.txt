@@ -4,7 +4,9 @@
 #   pip install -r requirements-aws.txt
 
 boto3>=1.34
-sagemaker>=2.214
+# SDK v2 obligatoire : l'API ``sagemaker.workflow`` (Pipelines) a été
+# restructurée en v3 (``sagemaker.mlops``), et nos scripts ciblent la v2.
+sagemaker>=2.214,<3
 s3fs>=2024.2.0
 kafka-python>=2.0.2
 

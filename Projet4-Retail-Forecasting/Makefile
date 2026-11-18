@@ -60,6 +60,9 @@ help:
 	@echo "make sagemaker-train  Training Job LightGBM sur SageMaker (--wait)"
 	@echo "make sagemaker-register  enregistre le modele (gate WAPE)"
 	@echo "make sagemaker-transform Batch Transform -> forecast/"
+	@echo "make sagemaker-tune   HyperParameter Tuning Job (6 essais, gate WAPE)"
+	@echo "make sagemaker-pipeline      SageMaker Pipeline (train -> eval -> gate -> registry)"
+	@echo "make sagemaker-pipeline-run  execute le pipeline et attend la fin"
 	@echo "make athena       tables externes + KPI SQL"
 	@echo "make dashboard    Streamlit :8501 (prevu vs realise)"
 	@echo "make brief        rapport hebdo redige par Ollama"
@@ -135,6 +138,18 @@ sagemaker-register:
 
 sagemaker-transform:
 	$(PY) -m infra.sagemaker.batch_transform
+
+sagemaker-tune:
+	$(PY) -m infra.sagemaker.tuning --wait
+
+sagemaker-pipeline:
+	$(PY) -m infra.sagemaker.pipeline --upsert
+
+sagemaker-pipeline-run:
+	$(PY) -m infra.sagemaker.pipeline --run --wait
+
+sagemaker-pipeline-status:
+	$(PY) -m infra.sagemaker.pipeline --status
 
 athena:
 	$(PY) -m infra.athena.setup

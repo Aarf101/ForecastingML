@@ -8,7 +8,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (48 tests, ~1 s, aucun service externe requis) |
+| `make test` | pytest (82 tests, ~1 s, aucun service externe requis) |
 | `make train` | entraînement complet LightGBM → `reports/local_baseline.json`, `data/forecast/` |
 | `make train-quick` | même chose sur 15 % des lignes (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |
@@ -19,6 +19,9 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 | `make diagram` | régénère les 5 variantes de diagrammes (matplotlib uniquement) |
 | `make slides` | régénère `docs/slides.pptx` depuis `docs/build_slides.py` |
 | `make sagemaker-register` | Model Registry (gate `WAPE_THRESHOLD`) |
+| `make sagemaker-tune` | HyperParameter Tuning Job (6 essais, objectif `test_wape`) |
+| `make sagemaker-pipeline` | SageMaker Pipeline `retail-forecast-mlops` (upsert) |
+| `make sagemaker-pipeline-run` | exécute le pipeline et attend (train → eval → gate → registry) |
 | `make sagemaker-transform` | Batch Transform → `forecast/` |
 | `make athena` | tables externes + 2 KPI SQL |
 | `make dashboard` | Streamlit :8501 |
@@ -50,12 +53,16 @@ src/retail_forecast/
 infra/sagemaker/
   train_entry.py       script exécuté DANS le conteneur (features + LightGBM)
   launch.py            boto3 create_training_job + packaging sourcedir.tar.gz
+  tuning.py            HyperParameter Tuning Job (objectif = test_wape, regex logs)
+  evaluate_entry.py    étape Processing : artefact -> evaluation.json (gate WAPE)
+  pipeline.py          SageMaker Pipeline (train -> eval -> gate -> registry)
   register.py          Model Registry (gate WAPE_THRESHOLD -> Approved)
 docs/  architecture.md (doc de référence), learner_lab.md (accès au compte AWS),
        windows.md (poste Windows : run.ps1, Git Bash, WSL), script.md (script oral),
        slides.md, diagrams/
 scripts/ run.ps1 (équivalent PowerShell du Makefile pour Windows)
-tests/ test_metrics, test_features, test_ingest, test_simulate
+tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
+       test_load_dataset, test_firehose_bridge, test_sagemaker_tuning
 ```
 
 ## Conventions à respecter
@@ -83,6 +90,9 @@ tests/ test_metrics, test_features, test_ingest, test_simulate
   (`WAPE_THRESHOLD=0.45` ; la v1 montre le fonctionnement du gate)
 - ✅ Phase 4c Batch Transform → `forecast/table/forecast.parquet` (4 800 lignes,
   4 horizons) · `inference.py` + `SAGEMAKER_REQUIREMENTS` dans l'artefact
+- 🟡 Phase 4d **tuning** (`tuning.py`) + **SageMaker Pipelines** (`pipeline.py`) :
+  code + 5 tests unitaires en place, exécution AWS à faire (voir
+  `docs/sagemaker_pipelines.md`)
 - ✅ Athena : base `retail_forecast`, tables `curated_sales` / `forecast`, 2 KPI
 - ✅ Phase 6 dashboard Streamlit (`make dashboard`, S3 ou local)
 - ✅ Phase 5 rapport LLM : `retail_forecast.agent.brief` (Ollama qwen2.5:3b)

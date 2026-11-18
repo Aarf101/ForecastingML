@@ -25,7 +25,10 @@ param(
         'aws-inventory', 'aws-setup', 'aws-bootstrap', 'aws-run',
         'aws-firehose-up', 'kafka-all', 'kafka-up', 'kafka-run',
         'kafka-status', 'kafka-down', 'aws-ingest-all',
-        'aws-upload-repo', 'aws-teardown'
+        'aws-upload-repo', 'aws-teardown',
+        'sagemaker-train', 'sagemaker-register', 'sagemaker-transform',
+        'sagemaker-tune', 'sagemaker-pipeline', 'sagemaker-pipeline-run',
+        'sagemaker-pipeline-status'
     )]
     [string]$Task = 'help'
 )
@@ -133,4 +136,13 @@ Les scripts .sh (make up / produce / consume) nécessitent Git Bash ou WSL.
 
     'aws-upload-repo'  { & bash scripts/upload_repo.sh }
     'aws-teardown'     { & bash scripts/aws_teardown.sh }
+
+    # Modelisation ML : entrainement, tuning, pipeline, registre, inference batch
+    'sagemaker-train'            { Invoke-Py @('-m', 'infra.sagemaker.launch', '--wait') }
+    'sagemaker-register'         { Invoke-Py @('-m', 'infra.sagemaker.register') }
+    'sagemaker-transform'        { Invoke-Py @('-m', 'infra.sagemaker.batch_transform') }
+    'sagemaker-tune'             { Invoke-Py @('-m', 'infra.sagemaker.tuning', '--wait') }
+    'sagemaker-pipeline'         { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--upsert') }
+    'sagemaker-pipeline-run'     { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--run', '--wait') }
+    'sagemaker-pipeline-status'  { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--status') }
 }

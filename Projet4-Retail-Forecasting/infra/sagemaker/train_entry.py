@@ -77,13 +77,23 @@ def _dataset_for_horizon(base: pd.DataFrame, horizon: int) -> pd.DataFrame:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Training Job LightGBM (SageMaker).")
+    # Chaque option accepte aussi sa variante à tiret bas : le HyperParameter
+    # Tuning Job transmet les noms tels quels (``--learning-rate`` ou
+    # ``--learning_rate`` selon la configuration), on évite ainsi un argparse
+    # qui rejette l'essai pour une histoire de tiret.
     ap.add_argument("--horizons", default="1")
-    ap.add_argument("--n-estimators", type=int, default=DEFAULT_PARAMS["n_estimators"])
-    ap.add_argument("--learning-rate", type=float, default=DEFAULT_PARAMS["learning_rate"])
-    ap.add_argument("--num-leaves", type=int, default=DEFAULT_PARAMS["num_leaves"])
-    ap.add_argument("--early-stopping-rounds", type=int, default=50)
-    ap.add_argument("--valid-days", type=int, default=56)
-    ap.add_argument("--test-days", type=int, default=28)
+    ap.add_argument("--n-estimators", "--n_estimators", dest="n_estimators",
+                    type=int, default=DEFAULT_PARAMS["n_estimators"])
+    ap.add_argument("--learning-rate", "--learning_rate", dest="learning_rate",
+                    type=float, default=DEFAULT_PARAMS["learning_rate"])
+    ap.add_argument("--num-leaves", "--num_leaves", dest="num_leaves",
+                    type=int, default=DEFAULT_PARAMS["num_leaves"])
+    ap.add_argument("--early-stopping-rounds", "--early_stopping_rounds",
+                    dest="early_stopping_rounds", type=int, default=50)
+    ap.add_argument("--valid-days", "--valid_days", dest="valid_days",
+                    type=int, default=56)
+    ap.add_argument("--test-days", "--test_days", dest="test_days",
+                    type=int, default=28)
     args = ap.parse_args()
     horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
 
@@ -179,6 +189,11 @@ def main() -> int:
         "[entry] resume "
         + json.dumps({h: round(m["test_wape"], 4) for h, m in by_horizon.items()})
     )
+    # Ligne dédiée au HyperParameter Tuning Job : la métrique d'objectif doit
+    # apparaître UNE seule fois dans les journaux (le regex CloudWatch ne lit
+    # qu'une valeur par événement). Elle porte sur l'horizon principal.
+    primary = by_horizon[str(horizons[0])]
+    print(f"[hpo] test_wape={primary['test_wape']:.6f}")
     return 0
 
 
