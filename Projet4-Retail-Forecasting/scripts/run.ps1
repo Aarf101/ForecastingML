@@ -25,11 +25,15 @@ param(
         'aws-inventory', 'aws-setup', 'aws-bootstrap', 'aws-run',
         'aws-firehose-up', 'kafka-all', 'kafka-up', 'kafka-run',
         'kafka-status', 'kafka-down', 'aws-ingest-all', 'aws-env-full',
-        'aws-upload-repo', 'aws-teardown',
+        'aws-setup-only', 'aws-upload-repo', 'aws-teardown', 'aws-teardown-go',
+        'aws-pipeline-up', 'aws-pipeline-run', 'aws-pipeline-status',
+        'aws-pipeline-down',
+        'dataset-info', 'ingest-dataset',
         'sagemaker-train', 'sagemaker-register', 'sagemaker-transform',
         'sagemaker-tune', 'sagemaker-pipeline', 'sagemaker-pipeline-run',
-        'sagemaker-pipeline-status', 'sagemaker-deploy',
-        'sagemaker-deploy-invoke', 'sagemaker-deploy-down'
+        'sagemaker-pipeline-status', 'sagemaker-pipeline-check',
+        'sagemaker-deploy', 'sagemaker-deploy-invoke',
+        'sagemaker-deploy-down'
     )]
     [string]$Task = 'help'
 )
@@ -139,6 +143,34 @@ Les scripts .sh (make up / produce / consume) nécessitent Git Bash ou WSL.
 
     'aws-upload-repo'  { & bash scripts/upload_repo.sh }
     'aws-teardown'     { & bash scripts/aws_teardown.sh }
+    'aws-teardown-go'  { & bash scripts/aws_teardown.sh --yes }
+
+    # Cree l'environnement d'ingestion et s'arrete la (aucune donnee envoyee).
+    'aws-setup-only'   { Invoke-Py @('-m', 'infra.aws.ingest_all', '--setup-only') }
+
+    # Orchestration AWS : Step Functions + Lambda gate + regle EventBridge.
+    # (l'argument est positionnel : up | run | status | print | down)
+    'aws-pipeline-up'     { Invoke-Py @('-m', 'infra.aws.orchestrate', 'up') }
+    'aws-pipeline-run'    { Invoke-Py @('-m', 'infra.aws.orchestrate', 'run') }
+    'aws-pipeline-status' { Invoke-Py @('-m', 'infra.aws.orchestrate', 'status') }
+    'aws-pipeline-down'   { Invoke-Py @('-m', 'infra.aws.orchestrate', 'down') }
+
+    # Datasets externes : $env:SOURCE (obligatoire), $env:DEST, $env:MAPPING, $env:SET
+    'dataset-info' {
+        if (-not $env:SOURCE) { Write-Error 'Definir $env:SOURCE (fichier local ou s3://...)'; exit 1 }
+        $a = @('-m', 'retail_forecast.data.load', '--source', $env:SOURCE)
+        if ($env:MAPPING) { $a += @('--mapping', $env:MAPPING) }
+        if ($env:SET) { $a += @('--set', $env:SET) }
+        Invoke-Py $a
+    }
+    'ingest-dataset' {
+        if (-not $env:SOURCE) { Write-Error 'Definir $env:SOURCE'; exit 1 }
+        if (-not $env:DEST) { Write-Error 'Definir $env:DEST (s3://bucket/raw/historique/...)'; exit 1 }
+        $a = @('-m', 'retail_forecast.data.load', '--source', $env:SOURCE, '--out', $env:DEST)
+        if ($env:MAPPING) { $a += @('--mapping', $env:MAPPING) }
+        if ($env:SET) { $a += @('--set', $env:SET) }
+        Invoke-Py $a
+    }
 
     # Modelisation ML : entrainement, tuning, pipeline, registre, inference batch
     'sagemaker-train'            { Invoke-Py @('-m', 'infra.sagemaker.launch', '--wait') }
@@ -148,6 +180,7 @@ Les scripts .sh (make up / produce / consume) nécessitent Git Bash ou WSL.
     'sagemaker-pipeline'         { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--upsert') }
     'sagemaker-pipeline-run'     { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--run', '--wait') }
     'sagemaker-pipeline-status'  { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--status') }
+    'sagemaker-pipeline-check'   { Invoke-Py @('-m', 'infra.sagemaker.pipeline', '--check') }
     'sagemaker-deploy'           { Invoke-Py @('-m', 'infra.sagemaker.deploy', 'up') }
     'sagemaker-deploy-invoke'    { Invoke-Py @('-m', 'infra.sagemaker.deploy', 'invoke') }
     'sagemaker-deploy-down'      { Invoke-Py @('-m', 'infra.sagemaker.deploy', 'down') }
