@@ -135,7 +135,7 @@ def definition(role: str, lambda_arn: str) -> dict:
                         "sagemaker_submit_directory": f"s3://{bucket}/code/sourcedir.tar.gz",
                         "sagemaker_region": REGION,
                         "sagemaker_container_log_level": "20",
-                        "horizons": "1,7,14,28",
+                        "horizons": ",".join(map(str, range(1, 17))),
                         "n-estimators": "300",
                         "early-stopping-rounds": "40",
                     },

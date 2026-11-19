@@ -14,6 +14,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import tarfile
@@ -69,10 +70,11 @@ def build_tarball() -> bytes:
 def upload_code(client, bucket: str) -> str:
     """Dépose sourcedir.tar.gz dans S3 et renvoie son URI."""
     body = build_tarball()
-    client.put_object(
-        Bucket=bucket, Key=SOURCEDIR_KEY, Body=body, ContentType="application/gzip"
-    )
-    uri = f"s3://{bucket}/{SOURCEDIR_KEY}"
+    key = f"code/{hashlib.sha256(body).hexdigest()}/sourcedir.tar.gz"
+    client.put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/gzip")
+    # Alias pour les anciens scripts ; les nouveaux jobs utilisent la clé immuable.
+    client.put_object(Bucket=bucket, Key=SOURCEDIR_KEY, Body=body, ContentType="application/gzip")
+    uri = f"s3://{bucket}/{key}"
     print(f"[launch] code empaqueté : {len(body) / 1024:.0f} Ko -> {uri}")
     return uri
 
@@ -134,7 +136,7 @@ def read_metrics(client, bucket: str, job_name: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Training Job SageMaker (LightGBM).")
-    parser.add_argument("--horizons", default="1,7,14,28", help="ex. 1,7,14,28")
+    parser.add_argument("--horizons", default=",".join(map(str, range(1, 17))), help="ex. 1,7,14,28")
     parser.add_argument("--estimators", type=int, default=300)
     parser.add_argument("--early-stopping", type=int, default=40)
     parser.add_argument("--wait", action="store_true", help="attendre la fin du job")
@@ -160,9 +162,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(request, indent=2))
         return 0
 
-    upload_code(client, SETTINGS.bucket)
+    code_uri = upload_code(client, SETTINGS.bucket)
+    request = job_request(SETTINGS.bucket, job_name, code_uri, args)
     if args.upload_only:
-        print(f"[launch] code déposé : s3://{SETTINGS.bucket}/{SOURCEDIR_KEY}")
+        print(f"[launch] code déposé : {code_uri}")
         return 0
     print(f"[launch] job {job_name} sur {INSTANCE} (max {MAX_RUNTIME // 60} min)")
     sm.create_training_job(**request)

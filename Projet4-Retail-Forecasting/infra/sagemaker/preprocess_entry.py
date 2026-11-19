@@ -15,7 +15,7 @@ Avec cette étape, la définition des features vit à un seul endroit.
 Montage SageMaker :
 
 * entrée  : ``/opt/ml/processing/input/curated/`` (Parquet de ``curated/sales/``)
-* entrée  : ``/opt/ml/processing/input/code/sourcedir.tar.gz`` (paquet du projet)
+* entrée  : ``/opt/ml/processing/input/package/sourcedir.tar.gz`` (paquet du projet)
 * sortie  : ``/opt/ml/processing/output/features/features.parquet``
 * sortie  : ``/opt/ml/processing/output/features.json`` (contrôle d'exécution)
 
@@ -32,7 +32,7 @@ import tempfile
 from pathlib import Path
 
 INPUT = Path("/opt/ml/processing/input/curated")
-CODE = Path("/opt/ml/processing/input/code")
+CODE = Path("/opt/ml/processing/input/package")
 OUTPUT = Path("/opt/ml/processing/output")
 
 # Colonnes produites par build_features() et attendues par les consommateurs :
@@ -92,8 +92,10 @@ def main() -> int:
     )
 
     _load_package()
-    from retail_forecast.features.build import build_features
+    from retail_forecast.features.build import active_catalog, build_features
 
+    historical_rows = len(sales)
+    sales = active_catalog(sales)
     base = build_features(sales, horizon=1, dropna=False)
     cols = sorted(c for c in base.columns if c.startswith(("lag_", "roll_")))
     print(
@@ -107,6 +109,8 @@ def main() -> int:
     base.to_parquet(sortie, index=False, compression="snappy")
 
     rapport = {
+        "historical_rows": historical_rows,
+        "scope": "active_catalog_at_latest_date",
         "rows": int(len(base)),
         "columns": int(base.shape[1]),
         "feature_columns": cols,

@@ -1,6 +1,6 @@
 # AGENTS.md — guide de travail pour un agent IA
 
-Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+28 par
+Projet **Retail ML Forecasting** (Projet 4) : prévision des ventes observées J+1…J+16 par
 (magasin, article) sur AWS. Ce fichier est la carte du dépôt. **Le lire en premier
 évite d'explorer le code** : ne relire un fichier que si la tâche le concerne.
 
@@ -8,9 +8,9 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision de la demande J+1…J+2
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (87 tests, ~1 s, aucun service externe requis) |
-| `make train` | entraînement complet LightGBM → `reports/local_baseline.json`, `data/forecast/` |
-| `make train-quick` | même chose sur 15 % des lignes (itération) |
+| `make test` | pytest (136 tests, aucun service externe requis) |
+| `make train` | évaluation locale LightGBM → `reports/local_baseline.json` |
+| `make train-quick` | même chose sur 20 % des séries, 200 arbres (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |
 | `make produce` / `make consume` | Phase 3 : ventes → topic `sales.events`, puis topic → `raw/` S3 |
 | `make e2e` | enchaîne tout et échoue si aucun objet n'arrive dans S3 |
@@ -51,8 +51,14 @@ src/retail_forecast/
   aws/ec2_kafka.py     Kafka open-source sur EC2 (up/status/down) — MSK refusé
   aws/kinesis_ingest.py ingestion 100 % AWS : Kinesis + Firehose + Lambda (up/run/status/down)
   lambda/replay_to_kinesis.py handler : dataset S3 → Kinesis (lots de 500, checkpoint S3)
-  agent/, inference/   vides (Phase 5 / Phase 4)
+  agent/brief.py       rapport LLM optionnel, prévisions et métriques actives
+infra/aws/
+  workflows.py         Step Functions training/inference + horaires EventBridge désactivés
+  dashboard_host.py    hébergement Streamlit sur le notebook existant
 infra/sagemaker/
+  lifecycle.py         candidat évalué -> Batch Transform -> manifeste conditionnel
+  recovery.py          reprise du registre avec preuve cloud indépendante
+  serving.py           layout code/ sans modification des fichiers évalués
   train_entry.py       script exécuté DANS le conteneur (features + LightGBM)
   launch.py            boto3 create_training_job + packaging sourcedir.tar.gz
   tuning.py            HyperParameter Tuning Job (objectif = test_wape, regex logs)
@@ -88,18 +94,21 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
 - ✅ Phase 3 ingestion Kafka → **Firehose DirectPut** → S3 (validée de bout en bout dans AWS :
   20 000 messages, objet Firehose de 164 Ko, 20 000 lignes JSON valides)
 - ✅ Phase 3b ETL `raw/` → `curated/` Parquet (dédup + typage)
-- ✅ Phase 4a Training Job SageMaker (`ml.m5.large`, 2,7 min, ~0,005 €) :
-  WAPE **0.4298** vs baseline 0.5683 côté cloud — identique au local (0.4291)
-- ✅ Phase 4b Model Registry : v1 `PendingManualApproval`, v2 `Approved`
-  (`WAPE_THRESHOLD=0.45` ; la v1 montre le fonctionnement du gate)
-- ✅ Phase 4c Batch Transform → `forecast/table/forecast.parquet` (4 800 lignes,
-  4 horizons) · `inference.py` + `SAGEMAKER_REQUIREMENTS` dans l'artefact
-- 🟡 Phase 4d **tuning** (`tuning.py`, objectif = WAPE de validation) + **SageMaker
-  Pipelines** (`pipeline.py`, éval indépendante) + **endpoint serverless**
-  (`deploy.py`) : code + 9 tests unitaires en place, exécution AWS à faire (voir
-  `docs/sagemaker_pipelines.md`)
-- ✅ Athena : base `retail_forecast`, tables `curated_sales` / `forecast`, 2 KPI
-- ✅ Phase 6 dashboard Streamlit (`make dashboard`, S3 ou local)
+- ✅ Phase 4a : 16 modèles entraînés sur AWS, évaluation Processing indépendante :
+  WAPE moyen **0,422609** vs baseline **0,559139** (gain 24,4 %).
+- ✅ Phase 4b : registre **v6**, artefact de serving vérifié et manifeste actif.
+  La v5 au mauvais layout de handler n'a jamais été activée et est Rejected.
+- ✅ Phase 4c : Batch Transform **19 200 lignes**, 1 200 séries × J+1…J+16 ;
+  fichiers immuables `forecast/runs/`, sélection par `deployment/active.json`.
+- ✅ Phase 4d : features, training, évaluation et gate du Pipeline exécutés sur AWS.
+  Échec de format d'inscription corrigé, reprise Step Functions terminée avec succès.
+  Voir `docs/learner_lab_workflows.md` pour les preuves et les limites du test.
+- 🟡 HPO (`tuning.py`) et endpoint serverless (`deploy.py`) : code et tests,
+  pas de nouvelle exécution AWS validée pendant cette correction.
+- ✅ Quotidien EventBridge -> Glue -> inférence -> publication testé avec succès,
+  même modèle v6, nouveau lot et précédent préservé ; horaires désactivés.
+- ✅ Athena : vue `forecast_active` liée au manifeste, 2 KPI exécutés sur AWS.
+- ✅ Phase 6 : Streamlit hébergé sur `retail-forecast-nb`, AppTest exécuté sur AWS.
 - ✅ Phase 5 rapport LLM : `retail_forecast.agent.brief` (Ollama qwen2.5:3b)
 - ✅ `docs/report.md` : les 4 points du rendu PDF
 - ⏳ Reste : vidéo 2 min, répétition orale, quantiles P10/P90
@@ -116,10 +125,11 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
    `ingest/kafka_to_firehose.py`. En local : Redpanda + s3mock.
 4. **Streamlit** remplace QuickSight. **Ollama / JumpStart** remplacent Bedrock.
    Le PDF autorise explicitement ces substitutions (slides 10-11).
-5. Horizon configuré à 28 jours (`FORECAST_HORIZON`) ; les diapositives parlent
-   parfois de 16 jours — écart connu, non tranché.
-6. Diagrammes = **cible**, pas « as-built » : seules les étapes données, Kafka, S3 et
-   l'entraînement local tournent réellement aujourd'hui.
+5. Horizon aligné sur `aws presentation.pdf` : les 16 jours J+1 à J+16.
+   Le parcours recommandé est `infra.aws.workflows` ; la publication passe par
+   `deployment/active.json`, jamais par le dernier package Approved seul.
+6. Diagrammes = **cible** : consulter `docs/learner_lab_workflows.md` pour
+   les composants réellement validés dans AWS.
 
 ## Pièges rencontrés
 
@@ -127,3 +137,13 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
   AWS vides au chargement. Ne pas « corriger » ça.
 - `kafka-python` 3.x : `value_deserializer` reçoit des `bytes`, décoder en UTF-8 soi-même.
 - `.env` est gitignoré ; `cp .env.example .env` avant toute commande qui touche S3/Kafka.
+
+## Parcours AWS corrigé
+
+Voir `docs/learner_lab_workflows.md`. `make aws-workflows-up` déploie les deux
+workflows, horaires désactivés ; `make aws-pipeline-run` entraîne et valide,
+`make aws-inference-run` utilise le modèle actif. `make aws-dashboard` démarre
+ou actualise Streamlit sur le notebook existant. Les dates manquantes restent
+inconnues : lags, cibles, rolling et split sont calendaires, sans imputation à zéro.
+Les anciennes commandes de registre et leur Lambda ne peuvent plus approuver
+automatiquement sans le pipeline indépendant.

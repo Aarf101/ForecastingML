@@ -1,0 +1,13 @@
+{
+  "checked_at": "2026-11-19 20:08:09.033750+00:00",
+  "active_compute_jobs": [],
+  "latest_training_job": "pipelines-yjcjidcc64i4-TrainLightGBM-hjemSkFUIz",
+  "daily_did_not_train": true,
+  "eventbridge_rules": {
+    "retail-training": "DISABLED",
+    "retail-inference": "DISABLED",
+    "retail-forecast-daily": "ABSENT"
+  },
+  "validation_rules_removed": true,
+  "notebook_status": "InService"
+}

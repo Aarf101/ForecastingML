@@ -1,13 +1,20 @@
 # Projet 4 — Retail ML Forecasting (MIT 2026)
 
 Prédiction de la demande de produits : pipeline complet **Kafka/MSK → S3 → ETL →
-SageMaker → agent LLM → dashboard**, conformément au sujet n°4 du PDF
+SageMaker → prévisions → dashboard**, avec rapport LLM optionnel, selon le sujet n°4 du PDF
 `1 Déroulement Cours Projet CL ML 2026.pdf` (« Données de ventes (S3/Kafka),
 modèle de prévision dans SageMaker, dashboard dynamique »).
 
 ![Architecture](docs/diagrams/architecture.png)
 
 Diagramme détaillé et justifications : **[docs/architecture.md](docs/architecture.md)**.
+
+**Revue du 19 novembre 2026 :** voir [docs/review.md](docs/review.md) pour les
+écarts aux deux PDF, les corrections vérifiées et les limites restantes.
+Évaluation AWS indépendante du code corrigé : **WAPE moyen 0,422609** contre
+**0,559139** pour la baseline, sur les 16 horizons. Voir
+[la preuve JSON](docs/evidence/aws_evaluation.json). Les autres anciennes métriques
+ci-dessous précèdent la correction du split et de la baseline.
 
 ## État d'avancement
 
@@ -17,11 +24,23 @@ Diagramme détaillé et justifications : **[docs/architecture.md](docs/architect
 | 1 | Données : générateur synthétique (schéma compatible M5/Rossmann) | ✅ |
 | 2 | Features + métriques + baseline LightGBM locale | ✅ |
 | 3a | Ingestion Kafka → S3 (Redpanda + s3mock en local) | ✅ |
-| 3b | ETL : nettoyage/dédup → `curated/` Parquet (Glue en AWS) | ⏳ |
-| 4 | SageMaker : Processing / Training / HPO / Pipelines / Registry | ⏳ |
-| 5 | Agent LLM LangGraph + RAG | ⏳ |
-| 6 | Dashboard Streamlit | ⏳ |
+| 3b | ETL : nettoyage/dédup → `curated/` Parquet | ✅ Glue exécuté dans AWS |
+| 4 | SageMaker : Processing / Training / évaluation / Registry / Batch | ✅ Évaluation, reprise contrôlée, publication AWS ; HPO et serverless optionnels non validés |
+| 5 | Rapport LLM Ollama / SageMaker, sans agent autonome | Code présent ; service LLM requis |
+| 6 | Dashboard Streamlit | ✅ Hébergé et testé sur le notebook AWS, données S3 actives |
 | 7 | Rapport, vidéo 2 min, soutenance | ⏳ |
+
+## Workflows AWS Learner Lab
+
+Le parcours corrigé est décrit dans [docs/learner_lab_workflows.md](docs/learner_lab_workflows.md).
+`make aws-workflows-up` déploie les workflows mensuel et quotidien, horaires
+désactivés. Une première exécution de `retail-training` doit réussir avant
+`retail-inference` : le modèle actif et ses prévisions sont publiés ensemble
+dans `deployment/active.json`. Les 16 jours J+1 à J+16 sont tous prédits.
+Le test réel EventBridge -> Glue -> inférence -> publication a réussi, en
+conservant le modèle v6 : [preuves AWS](docs/evidence/aws_workflows.json).
+Le notebook `retail-forecast-nb` héberge le dashboard (`/proxy/8501/` depuis
+Jupyter). Les horaires récurrents restent désactivés.
 
 ## Démarrage rapide
 
@@ -29,7 +48,7 @@ Diagramme détaillé et justifications : **[docs/architecture.md](docs/architect
 make setup        # venv .venv + dépendances (CPU)
 make env          # .env (S3 local par défaut)
 make data         # 876 000 lignes -> data/raw/sales.parquet
-make test         # 42 tests (features, métriques, générateur, ingestion)
+make test         # tests locaux, sans Docker ni AWS
 make train-quick  # LightGBM sur 20 % des séries (~3 s)
 make train        # run complet (1 200 séries, ~40 s sur 11 cœurs)
 
@@ -65,7 +84,7 @@ Sémantique **at-least-once** : le commit Kafka n'a lieu qu'après l'écriture d
 l'objet → un crash peut dupliquer un lot, l'ETL déduplique sur
 `(store_id, item_id, date)`. Console Kafka : <http://localhost:8080>.
 
-## Résultat de référence (local, horizon 1 jour)
+## Résultat historique (avant corrections, horizon 1 jour)
 
 | Modèle | WAPE | RMSE |
 |--------|------|------|
@@ -86,16 +105,18 @@ src/retail_forecast/
   features/build.py    # features anti-fuite + split temporel
   evaluate/metrics.py  # WAPE, MAPE, RMSE, pinball loss
   train/train_lgbm.py  # entraînement local = miroir du Training Job SageMaker
-  ingest/ inference/ agent/   # phases 3, 5 (à venir)
-tests/                 # 30 tests unitaires
+  ingest/ agent/       # ingestion et rapport LLM optionnel
+infra/sagemaker/        # jobs, pipeline, registre et handler d'inférence
+dashboards/streamlit/  # interface de consultation
+tests/                 # tests sans service externe
 docs/diagrams/         # architecture.py + .png + .svg
 docs/architecture.md   # diagramme documenté, décisions, coûts, plan B
 ```
 
 ## Compte AWS (Learner Lab)
 
-Le projet tourne **entièrement en local** (Redpanda + s3mock). Pour les Phases 4 à 6
-(SageMaker), il faut le compte fourni par l'école : voir
+Le mode local utilise Redpanda + s3mock. Le parcours SageMaker, Athena et le
+dashboard sont aussi déployés et validés dans le compte fourni par l'école : voir
 **[docs/learner_lab.md](docs/learner_lab.md)** — enrôlement, démarrage de session,
 récupération des identifiants dans le profil `lab`, bascule du `.env`, limites du lab
 et réflexes qui protègent le crédit.
@@ -129,10 +150,9 @@ Chaque slide a des notes d'orateur (onglet « Notes » dans PowerPoint).
    Processing Job et dans Glue : pas de dérive entre dev et prod.
 2. **Split temporel** et exclusion de `stock_on_hand` / `stockout` (fuites) :
    la question classique en soutenance est traitée d'avance.
-3. **WAPE** comme métrique principale (robuste aux ventes nulles) + **pinball
-   loss** pour valider les quantiles P10/P90 utilisés dans le stock de sécurité.
-4. **LLM pluggable** (`bedrock` | `jumpstart` | `ollama`) : le projet tourne même
-   si Bedrock est inaccessible dans le Learner Lab.
+3. **WAPE** comme métrique principale. La pinball loss est disponible, mais les
+   quantiles P10/P90 ne sont pas encore entraînés ni livrés.
+4. **Rapport LLM** via `ollama` ou `sagemaker` ; Bedrock n'est pas implémenté.
 
 ## Données
 
@@ -141,8 +161,10 @@ magasins × 60 articles, ~3,6 % de ruptures). Pour utiliser un vrai jeu :
 
 ```bash
 # Kaggle (M5 Walmart / Rossmann) : placer le CSV dans data/raw/ puis
-.venv/bin/python -m retail_forecast.data.simulate --help   # voir le schéma attendu
+.venv/bin/python -m retail_forecast.data.load --source data/raw/ventes.csv
 ```
 
 Colonnes attendues : `date, store_id, item_id, category, unit_price, promo,
 is_holiday, lead_time_days, stock_on_hand, stockout, units`.
+Les lags et fenêtres utilisent les dates calendaires réelles. Les doublons
+sont refusés ; un jour absent reste inconnu et ne devient pas une vente nulle.

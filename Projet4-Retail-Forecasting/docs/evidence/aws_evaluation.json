@@ -1,0 +1,87 @@
+{
+  "regression_metrics": {
+    "test_wape": {
+      "value": 0.422609,
+      "standard_deviation": "NaN"
+    },
+    "baseline_wape": {
+      "value": 0.559139,
+      "standard_deviation": "NaN"
+    },
+    "improvement_vs_baseline": {
+      "value": 0.244178,
+      "standard_deviation": "NaN"
+    }
+  },
+  "by_horizon": {
+    "1": {
+      "wape": 0.424981,
+      "wape_artefact": 0.424981
+    },
+    "2": {
+      "wape": 0.424563,
+      "wape_artefact": 0.424563
+    },
+    "3": {
+      "wape": 0.426322,
+      "wape_artefact": 0.426322
+    },
+    "4": {
+      "wape": 0.42448,
+      "wape_artefact": 0.42448
+    },
+    "5": {
+      "wape": 0.423541,
+      "wape_artefact": 0.423541
+    },
+    "6": {
+      "wape": 0.424569,
+      "wape_artefact": 0.424569
+    },
+    "7": {
+      "wape": 0.422316,
+      "wape_artefact": 0.422316
+    },
+    "8": {
+      "wape": 0.425985,
+      "wape_artefact": 0.425985
+    },
+    "9": {
+      "wape": 0.422469,
+      "wape_artefact": 0.422469
+    },
+    "10": {
+      "wape": 0.420795,
+      "wape_artefact": 0.420795
+    },
+    "11": {
+      "wape": 0.420348,
+      "wape_artefact": 0.420348
+    },
+    "12": {
+      "wape": 0.417281,
+      "wape_artefact": 0.417281
+    },
+    "13": {
+      "wape": 0.419159,
+      "wape_artefact": 0.419159
+    },
+    "14": {
+      "wape": 0.420131,
+      "wape_artefact": 0.420131
+    },
+    "15": {
+      "wape": 0.423876,
+      "wape_artefact": 0.423876
+    },
+    "16": {
+      "wape": 0.420933,
+      "wape_artefact": 0.420933
+    }
+  },
+  "n_horizons": 16,
+  "best_horizon": "12",
+  "worst_horizon": "3",
+  "independent": true,
+  "source": "recompute"
+}

@@ -95,6 +95,7 @@ def test_evaluate_entry_writes_regression_metrics(tmp_path, monkeypatch):
     sortie = tmp_path / "out"
     monkeypatch.setattr(evaluate_entry, "INPUT", entree)
     monkeypatch.setattr(evaluate_entry, "OUTPUT", sortie)
+    monkeypatch.setattr(evaluate_entry, "_recompute", lambda archive: {"1": 0.39, "28": 0.47})
 
     assert evaluate_entry.main() == 0
     rapport = json.loads((sortie / "evaluation.json").read_text())
@@ -117,8 +118,8 @@ def test_evaluate_entry_fails_without_archive(tmp_path, monkeypatch):
         evaluate_entry.main()
 
 
-def test_evaluate_entry_flags_artifact_fallback(tmp_path, monkeypatch):
-    """Sans données montées, le rapport doit dire qu'il n'est pas indépendant."""
+def test_evaluate_entry_blocks_artifact_fallback(tmp_path, monkeypatch):
+    """Sans données montées, aucune approbation automatique n'est possible."""
     entree = tmp_path / "in"
     entree.mkdir()
     _fake_model_tar(entree, SUMMARY)
@@ -127,10 +128,19 @@ def test_evaluate_entry_flags_artifact_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr(evaluate_entry, "CODE", tmp_path / "pas-de-code")
     monkeypatch.setattr(evaluate_entry, "OUTPUT", tmp_path / "out")
 
-    assert evaluate_entry.main() == 0
-    rapport = json.loads((tmp_path / "out" / "evaluation.json").read_text())
-    assert rapport["independent"] is False
-    assert rapport["source"] == "artifact"
+    with pytest.raises(SystemExit, match="approbation bloquée"):
+        evaluate_entry.main()
+    assert not (tmp_path / "out" / "evaluation.json").exists()
+
+
+@pytest.mark.parametrize("values", [{"1": 0.39}, {"1": float("nan"), "28": 0.4}])
+def test_evaluate_blocks_partial_or_invalid_metrics(tmp_path, monkeypatch, values):
+    _fake_model_tar(tmp_path, SUMMARY)
+    monkeypatch.setattr(evaluate_entry, "INPUT", tmp_path)
+    monkeypatch.setattr(evaluate_entry, "_recompute", lambda archive: values)
+    monkeypatch.setattr(evaluate_entry, "OUTPUT", tmp_path / "out")
+    with pytest.raises(SystemExit, match="approbation bloquée"):
+        evaluate_entry.main()
 
 
 def test_gate_decision_uses_mean_wape_and_falls_back():
@@ -166,7 +176,7 @@ def test_boto_session_falls_back_when_profile_missing(monkeypatch):
     assert "AWS_PROFILE" not in os.environ
 
 
-def test_pipeline_definition_graph():
+def test_pipeline_definition_graph(monkeypatch):
     """Le graphe du pipeline : features -> train -> eval -> condition -> registre.
 
     Les deux téléversements (code d'entraînement, script d'évaluation) sont
@@ -179,6 +189,11 @@ def test_pipeline_definition_graph():
     from sagemaker.estimator import EstimatorBase, UploadedCode
 
     from infra.sagemaker import pipeline as pl
+
+    from dataclasses import replace
+    monkeypatch.setattr(pl, "SETTINGS", replace(
+        pl.SETTINGS, role_arn="arn:aws:iam::123456789012:role/test", bucket="b", profile=""
+    ))
 
     fake_code = UploadedCode(
         s3_prefix="s3://b/code/sourcedir.tar.gz", script_name="train_entry.py"
@@ -199,12 +214,20 @@ def test_pipeline_definition_graph():
     assert [s["Name"] for s in definition["Steps"]] == [
         "PreprocessFeatures", "TrainLightGBM", "EvaluateModel", "GateWAPE",
     ]
+    for step in definition["Steps"]:
+        if step["Type"] == "Processing":
+            paths = [i["S3Input"]["LocalPath"] for i in step["Arguments"]["ProcessingInputs"]]
+            assert len(paths) == len(set(paths))
     gate = next(s for s in definition["Steps"] if s["Type"] == "Condition")
     assert [b["Name"] for b in gate["Arguments"]["IfSteps"]] == [
         "RegisterApproved-RegisterModel"
     ]
     assert [b["Name"] for b in gate["Arguments"]["ElseSteps"]] == ["WAPETropEleve"]
     assert [p["Name"] for p in definition["Parameters"]] == ["WapeThreshold"]
+    metadata = gate["Arguments"]["IfSteps"][0]["Arguments"]["CustomerMetadataProperties"]
+    for value in metadata.values():
+        if isinstance(value, str):
+            assert re.fullmatch(r"[A-Za-z0-9_.:/=+@ -]{1,256}", value)
     condition = json.dumps(gate["Arguments"]["Conditions"])
     assert "regression_metrics.test_wape.value" in condition
 
@@ -259,4 +282,3 @@ def test_preprocess_entry_writes_feature_table(tmp_path, monkeypatch):
     assert rapport["rows"] == len(ventes)
     assert rapport["stores"] == 2
     assert "lag_35" in rapport["feature_columns"]
-

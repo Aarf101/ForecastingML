@@ -40,7 +40,9 @@ from retail_forecast.evaluate.metrics import bias, rmse, wape  # noqa: E402
 from retail_forecast.features.build import (  # noqa: E402
     TARGET,
     add_target,
+    active_catalog,
     build_features,
+    categorical_levels,
     time_split,
     xy,
 )
@@ -75,7 +77,7 @@ def _dataset_for_horizon(base: pd.DataFrame, horizon: int) -> pd.DataFrame:
     """Recolle la cible ``t + horizon`` sur des features calculées une seule fois."""
     df = add_target(base.drop(columns=[TARGET]), horizon=horizon)
     feat_cols = [c for c in df.columns if c.startswith(("lag_", "roll_"))]
-    return df.dropna(subset=[*feat_cols, TARGET]).reset_index(drop=True)
+    return df.dropna(subset=[*feat_cols, TARGET, "seasonal_naive"]).reset_index(drop=True)
 
 
 def main() -> int:
@@ -114,7 +116,7 @@ def main() -> int:
             f"{len(base):,} lignes, horizons {horizons}"
         )
     else:
-        base = build_features(sales, horizon=1, dropna=False)
+        base = build_features(active_catalog(sales), horizon=1, dropna=False)
         print(f"[entry] features calculées : {len(base):,} lignes, horizons {horizons}")
 
     params = {
@@ -171,14 +173,18 @@ def main() -> int:
         )
 
     # Le handler d'inférence doit voyager DANS l'artefact (Batch Transform).
+    serving_dir = model_dir / "code"
+    serving_dir.mkdir(exist_ok=True)
     handler = CODE_DIR / "inference.py"
     if handler.exists():
         shutil.copy(handler, model_dir / "inference.py")
+        shutil.copy(handler, serving_dir / "inference.py")
     # Dépendances d'inférence : le conteneur les installe au démarrage via
     # SAGEMAKER_REQUIREMENTS (LightGBM n'est pas dans l'image SKLearn).
     reqs = CODE_DIR / "requirements.txt"
     if reqs.exists():
         shutil.copy(reqs, model_dir / "requirements.txt")
+        shutil.copy(reqs, serving_dir / "requirements.txt")
 
     (model_dir / "metadata.json").write_text(
         json.dumps(
@@ -186,8 +192,12 @@ def main() -> int:
                 "framework": "lightgbm",
                 "horizons": horizons,
                 "features": features,
+                "categorical_levels": categorical_levels(base),
                 "params": {k: v for k, v in params.items() if k != "n_jobs"},
                 "metrics": by_horizon,
+                "split": {"valid_days": args.valid_days, "test_days": args.test_days},
+                "evaluation_protocol": "rolling_origin_purged_v2",
+                "training_scope": "active_catalog_at_latest_date",
             },
             indent=2,
             default=float,

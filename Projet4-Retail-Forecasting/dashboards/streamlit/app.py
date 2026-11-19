@@ -13,30 +13,29 @@ from __future__ import annotations
 
 import io
 import json
-import os
-from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# Le dashboard tourne dans deux contextes : en local (avec le paquet installé)
-# et sur une instance SageMaker, où seul ce fichier est déposé. D'où le repli
-# sur l'environnement : S3_BUCKET suffit, le rôle de l'instance fournit les droits.
-try:
-    from retail_forecast.config import ROOT, SETTINGS
+from retail_forecast.config import ROOT, SETTINGS
+from retail_forecast.ingest.storage import s3_client
 
-    BUCKET = SETTINGS.bucket
-except Exception:  # mode « fichier seul » (SageMaker, Colab, etc.)
-    ROOT = Path.cwd()
-    BUCKET = os.environ.get("S3_BUCKET", "retail-forecast-654654161593-ayoub")
+BUCKET = SETTINGS.bucket
+
+
+def _forecast_key():
+    """Le manifeste lie atomiquement le modèle actif à son lot validé."""
+    from infra.sagemaker.lifecycle import read_active
+    from retail_forecast.ingest.storage import s3_client
+
+    active, _etag = read_active(s3_client())
+    return active["forecast_key"]
 
 
 def _s3():
-    """Client S3 minimal : identifiants de l'environnement (rôle IAM)."""
-    import boto3
-
-    return boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+    """Même configuration S3 que l'ingestion, y compris s3mock en local."""
+    return s3_client()
 
 
 st.set_page_config(page_title="Retail ML Forecasting", page_icon="🛒", layout="wide")
@@ -46,14 +45,16 @@ st.set_page_config(page_title="Retail ML Forecasting", page_icon="🛒", layout=
 def load_forecast() -> tuple[pd.DataFrame, str]:
     """Prévisions : S3 d'abord, sinon data/forecast/."""
     local = ROOT / "data" / "forecast" / "forecast.parquet"
-    if BUCKET:
+    if BUCKET and not SETTINGS.s3_endpoint_url:
         try:
             body = _s3().get_object(
-                Bucket=BUCKET, Key="forecast/table/forecast.parquet"
+                Bucket=BUCKET, Key=_forecast_key()
             )["Body"].read()
             return pd.read_parquet(io.BytesIO(body)), f"s3://{BUCKET}"
-        except Exception:  # pas encore de prévision sur S3
-            pass
+        except Exception as exc:
+            st.error(f"Prévisions actives AWS indisponibles ({type(exc).__name__}). "
+                     "Terminer retail-training avant de consulter le dashboard.")
+            st.stop()
     if local.exists():
         return pd.read_parquet(local), "local"
     st.error("Aucune prévision trouvée : lancer `make sagemaker-transform`.")
@@ -65,14 +66,22 @@ def load_history() -> pd.DataFrame:
     """Historique des ventes : S3 (curated) sinon data/raw/."""
     if BUCKET:
         try:
-            body = _s3().get_object(
-                Bucket=BUCKET, Key="curated/sales/sales.parquet"
-            )["Body"].read()
-            df = pd.read_parquet(io.BytesIO(body))
+            client = _s3()
+            frames = []
+            for page in client.get_paginator("list_objects_v2").paginate(
+                Bucket=BUCKET, Prefix="curated/sales/"
+            ):
+                for obj in page.get("Contents", []):
+                    if obj["Key"].endswith((".parquet", ".pq")):
+                        body = client.get_object(Bucket=BUCKET, Key=obj["Key"])["Body"].read()
+                        frames.append(pd.read_parquet(io.BytesIO(body)))
+            if not frames:
+                raise FileNotFoundError("aucune partition curated")
+            df = pd.concat(frames, ignore_index=True)
             df["date"] = pd.to_datetime(df["date"])
             return df
-        except Exception:
-            pass
+        except Exception as exc:
+            st.warning(f"Historique S3 indisponible ({type(exc).__name__}) : repli local.")
     local_raw = ROOT / "data" / "raw" / "sales.parquet"
     if not local_raw.exists():
         st.error(
@@ -88,15 +97,11 @@ def load_history() -> pd.DataFrame:
 @st.cache_data(ttl=300, show_spinner=False)
 def load_metrics() -> dict:
     """Métriques du dernier entraînement (copie locale du rapport)."""
-    if BUCKET:
-        try:
-            body = _s3().get_object(
-                Bucket=BUCKET, Key="reports/cloud_metrics.json"
-            )["Body"].read()
-            return json.loads(body)
-        except Exception:
-            pass
-    for name in ("cloud_metrics.json", "local_baseline.json"):
+    if BUCKET and not SETTINGS.s3_endpoint_url:
+        from infra.sagemaker.lifecycle import read_active
+        active, _etag = read_active(_s3())
+        return active.get("metrics", {})
+    for name in ("local_baseline.json",):
         path = ROOT / "reports" / name
         if path.exists():
             return json.loads(path.read_text())
@@ -107,7 +112,8 @@ forecast, source = load_forecast()
 history = load_history()
 metrics = load_metrics()
 
-st.title("🛒 Prévision de la demande — J+1 à J+28")
+st.title(f"🛒 Prévision de la demande — jusqu'à J+{forecast['horizon'].max()}")
+st.caption("Cible : ventes observées ; la demande perdue pendant les ruptures n’est pas estimée.")
 st.caption(
     f"source prévisions : {source} · origine {forecast['origin_date'].max()} · "
     f"modèle {forecast['model_version'].iloc[0]} ({forecast['model_job'].iloc[0]})"
@@ -119,15 +125,18 @@ with st.sidebar:
     st.header("Filtres")
     chosen_stores = st.multiselect("Magasins", stores, default=stores[:3])
     horizons = st.multiselect(
-        "Horizons (jours)", sorted(forecast["horizon"].unique()), default=[1, 7]
+        "Horizons (jours)", sorted(forecast["horizon"].unique()),
+        default=sorted(forecast["horizon"].unique())
     )
     st.divider()
     st.caption("WAPE du modèle (test) :")
-    if metrics:
-        wape_model = metrics.get("test_wape", 0)
-        wape_base = metrics.get("baseline_wape", 0)
-        st.metric("Modèle", f"{wape_model:.1%}", f"{(wape_model - wape_base):+.1%} vs baseline")
+    if "test_wape" in metrics and "baseline_wape" in metrics:
+        wape_model = metrics["test_wape"]
+        wape_base = metrics["baseline_wape"]
+        st.metric("Modèle", f"{wape_model:.1%}", f"{100 * (wape_model - wape_base):+.1f} points vs baseline")
         st.metric("Baseline saisonnière", f"{wape_base:.1%}")
+    else:
+        st.caption("Métriques d'évaluation indisponibles.")
 
 view = forecast[forecast["store_id"].isin(chosen_stores or stores)]
 view = view[view["horizon"].isin(horizons or sorted(forecast["horizon"].unique()))]
@@ -245,4 +254,3 @@ with st.expander("Télécharger les prévisions (CSV)"):
         file_name="forecast.csv",
         mime="text/csv",
     )
-

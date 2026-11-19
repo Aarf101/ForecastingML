@@ -1,0 +1,46 @@
+{
+  "exceptions": [],
+  "errors": [],
+  "titles": [
+    "🛒 Prévision de la demande — jusqu'à J+16"
+  ],
+  "metrics": [
+    [
+      "Unités prévues",
+      "19,946"
+    ],
+    [
+      "Séries couvertes",
+      "180"
+    ],
+    [
+      "Dates cibles",
+      "16"
+    ],
+    [
+      "Horizons",
+      "J+1, J+2, J+3, J+4, J+5, J+6, J+7, J+8, J+9, J+10, J+11, J+12, J+13, J+14, J+15, J+16"
+    ],
+    [
+      "Moyenne 28 j réalisée",
+      "25.1 u/j"
+    ],
+    [
+      "Moyenne prévue",
+      "24.5 u/j"
+    ],
+    [
+      "Modèle",
+      "42.3%"
+    ],
+    [
+      "Baseline saisonnière",
+      "55.9%"
+    ]
+  ],
+  "captions": [
+    "Cible : ventes observées ; la demande perdue pendant les ruptures n’est pas estimée.",
+    "source prévisions : s3://retail-forecast-654654161593-ayoub · origine 2024-12-30 00:00:00 · modèle v6 (retail-transform-8cacb06bc62c42dd84c221589ccc910f)",
+    "Un écart fort signale un pic attendu (promo, férié) ou une dérive du modèle."
+  ]
+}

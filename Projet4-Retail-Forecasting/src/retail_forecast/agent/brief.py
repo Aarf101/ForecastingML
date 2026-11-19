@@ -25,8 +25,24 @@ import pandas as pd
 
 from retail_forecast.config import ROOT, SETTINGS
 
-PROMPT = """Données de la semaine : {totaux}. Magasins les plus forts : {magasins}. """     """Séries les plus volatiles : {volatiles}. Modèle : WAPE {wape:.1%} contre {baseline:.1%} """     """pour la baseline saisonnière, soit {gain:.0%} de mieux, biais {biais:+.1%}. """     """Rédige un paragraphe unique de trois phrases en français qui commente ces chiffres, """     """puis deux actions concrètes pour le responsable des achats. Pas de listes, pas de titres, """     """pas de recopie des données. N'invente aucun chiffre. """ \
-    """Réponds en un seul paragraphe suivi, en français, sans puces ni titres. """
+PROMPT = """Prévisions ponctuelles par horizon : {totaux}.
+Ces horizons sont des dates isolées, pas des cumuls hebdomadaires.
+Magasins aux volumes prévus les plus élevés : {magasins}.
+Séries aux volumes prévus les plus élevés : {volatiles}.
+Évaluation : {qualite}.
+Rédige trois phrases d'analyse puis deux actions pour le responsable des achats,
+en un paragraphe français sans titres ni listes. N'invente aucun chiffre,
+aucune mesure de volatilité, ni aucune métrique absente.
+"""
+
+
+def _forecast_key():
+    """Le manifeste lie atomiquement le modèle actif à son lot validé."""
+    from infra.sagemaker.lifecycle import read_active
+    from retail_forecast.ingest.storage import s3_client
+
+    active, _etag = read_active(s3_client())
+    return active["forecast_key"]
 
 
 def _ollama(prompt: str, model: str, base_url: str, timeout: int = 180) -> str:
@@ -78,10 +94,10 @@ def _sagemaker(prompt: str, endpoint: str) -> str:
     return text.strip()
 
 
-def generate(prompt: str, provider: str) -> str:
+def generate(prompt: str, provider: str, *, model=None, base_url=None) -> str:
     """Choisit le backend LLM (``ollama`` en local, ``sagemaker`` sur AWS)."""
     if provider == "ollama":
-        return _ollama(prompt, SETTINGS.ollama_model, SETTINGS.ollama_base_url)
+        return _ollama(prompt, model or SETTINGS.ollama_model, base_url or SETTINGS.ollama_base_url)
     if provider == "sagemaker":
         return _sagemaker(prompt, SETTINGS.llm_endpoint)
     if provider == "bedrock":
@@ -93,22 +109,26 @@ def generate(prompt: str, provider: str) -> str:
 
 def _load_forecast() -> pd.DataFrame:
     """Prévisions : S3 si configuré, sinon copie locale."""
-    if SETTINGS.bucket:
+    if SETTINGS.bucket and not SETTINGS.s3_endpoint_url:
         from retail_forecast.ingest.storage import s3_client
 
         try:
             body = s3_client().get_object(
-                Bucket=SETTINGS.bucket, Key="forecast/table/forecast.parquet"
+                Bucket=SETTINGS.bucket, Key=_forecast_key()
             )["Body"].read()
             return pd.read_parquet(io.BytesIO(body))
-        except Exception:
-            pass
+        except Exception as exc:
+            raise RuntimeError("prévisions actives AWS indisponibles") from exc
     return pd.read_parquet(ROOT / "data" / "forecast" / "forecast.parquet")
 
 
 def _load_metrics() -> dict:
-    cloud = ROOT / "reports" / "cloud_metrics.json"
-    path = cloud if cloud.exists() else ROOT / "reports" / "local_baseline.json"
+    if SETTINGS.bucket and not SETTINGS.s3_endpoint_url:
+        from infra.sagemaker.lifecycle import read_active
+        from retail_forecast.ingest.storage import s3_client
+        active, _etag = read_active(s3_client())
+        return active.get("metrics", {})
+    path = ROOT / "reports" / "local_baseline.json"
     return json.loads(path.read_text()) if path.exists() else {}
 
 
@@ -133,19 +153,18 @@ def build_prompt(forecast: pd.DataFrame) -> str:
         .head(3)
     )
     metrics = _load_metrics()
+    if "test_wape" in metrics and "baseline_wape" in metrics:
+        quality = (f"WAPE modèle {metrics['test_wape']:.1%}, "
+                   f"baseline {metrics['baseline_wape']:.1%}")
+        if "test_bias" in metrics:
+            quality += f", biais {metrics['test_bias']:+.1%}"
+    else:
+        quality = "métriques indisponibles ; qualité non évaluée"
     return PROMPT.format(
         totaux=", ".join(f"J+{h} : {v} u" for h, v in sorted(totaux.items())),
         magasins=", ".join(f"{s} ({v} u)" for s, v in magasins.items()),
         volatiles=", ".join(f"{s}/{i} ({v:.0f} u)" for (s, i), v in series.items()),
-        wape=metrics.get("test_wape", 0.0),
-        baseline=metrics.get("baseline_wape", 0.0),
-        biais=metrics.get("test_bias", 0.0),
-        gain=(
-            (metrics.get("baseline_wape", 0.0) - metrics.get("test_wape", 0.0))
-            / metrics.get("baseline_wape", 1.0)
-            if metrics.get("baseline_wape")
-            else 0.0
-        ),
+        qualite=quality,
     )
 
 
@@ -162,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     forecast = _load_forecast()
     prompt = build_prompt(forecast)
     print(f"[brief] provider {args.provider} · {len(forecast):,} prévisions agrégées")
-    text = generate(prompt, args.provider)
+    text = generate(prompt, args.provider, model=args.model, base_url=args.base_url)
 
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     content = f"# Brief ventes — {day}\n\n{text}\n"

@@ -1,8 +1,9 @@
 """Handler Lambda — gate WAPE + enregistrement au Model Registry.
 
 Utilisé comme état ``GateWAPE`` de la state machine Step Functions : il relit les
-métriques du Training Job directement dans son artefact S3, compare ``test_wape``
-au seuil, puis enregistre (ou bloque) la version du modèle.
+métriques du Training Job directement dans son artefact S3, compare ``mean_wape``
+au seuil pour information, puis enregistre en PendingManualApproval.
+L'approbation automatique exige le SageMaker Pipeline indépendant.
 
 Aucune dépendance hors ``boto3`` : l'archive ``model.tar.gz`` est lue avec
 ``tarfile`` (stdlib), donc pas de couche Lambda à maintenir.
@@ -10,7 +11,7 @@ Aucune dépendance hors ``boto3`` : l'archive ``model.tar.gz`` est lue avec
 Entrée attendue (event) :
   bucket        bucket du lac
   training_job  nom du Training Job qui vient de finir
-  threshold     seuil de WAPE (défaut WAPE_THRESHOLD ou 0.45)
+  threshold     seuil de WAPE (défaut 0.45)
   group         groupe de packages (défaut ``retail-forecast-lgbm``)
   image         image d'inférence (défaut : conteneur SKLearn managé)
 
@@ -19,7 +20,7 @@ Sortie : ``{"approved": bool, "wape": float, "baseline_wape": float, ...}``
 
 import io
 import json
-import os
+import math
 import tarfile
 
 import boto3
@@ -45,15 +46,16 @@ def _metrics(bucket: str, job: str) -> dict:
 def lambda_handler(event, context=None):
     bucket = event["bucket"]
     job = event["training_job"]
-    threshold = float(event.get("threshold") or os.environ.get("WAPE_THRESHOLD", 0.45))
+    threshold = float(event.get("threshold", 0.45))
     group = event.get("group", "retail-forecast-lgbm")
     image = event.get("image", DEFAULT_IMAGE)
 
     metrics = _metrics(bucket, job)
-    wape = float(metrics["test_wape"])
+    wape = float(metrics["mean_wape"] if "mean_wape" in metrics else metrics["test_wape"])
     baseline = float(metrics.get("baseline_wape", 0.0))
-    approved = wape <= threshold
-    status = "Approved" if approved else "PendingManualApproval"
+    approved = math.isfinite(wape) and 0 <= wape <= threshold
+    approved = False  # Approbation automatique réservée au pipeline indépendant.
+    status = "PendingManualApproval"
 
     print(
         f"[gate] {job} : WAPE {wape:.4f} vs seuil {threshold:.2f} "
@@ -90,7 +92,8 @@ def lambda_handler(event, context=None):
             "SupportedRealtimeInferenceInstanceTypes": ["ml.m5.large"],
         },
         CustomerMetadataProperties={
-            "test_wape": f"{wape:.6f}",
+            "test_wape": f"{metrics['test_wape']:.6f}",
+            "mean_wape": f"{wape:.6f}",
             "baseline_wape": f"{baseline:.6f}",
             "training_job": job,
             "threshold": f"{threshold:.2f}",

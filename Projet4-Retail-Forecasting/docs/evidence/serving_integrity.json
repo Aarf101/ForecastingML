@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-19",
+  "source_model_uri": "s3://retail-forecast-654654161593-ayoub/models/pipelines-yjcjidcc64i4-TrainLightGBM-hjemSkFUIz/output/model.tar.gz",
+  "serving_model_uri": "s3://retail-forecast-654654161593-ayoub/models/serving/8e0b9a1f433a86f67c2e6bba40bea957e4972bc7924802d2fb818d97be0b3de5/model.tar.gz",
+  "all_original_members_preserved": true,
+  "original_sha256": {
+    "inference.py": "15a17104a0e3db0d90f396eb2aca6ec03de6f83a22b25195c84d5c01301baeea",
+    "model_5.txt": "1a540c0f729a89a7e874fe0b36ef5cb98ee9d01eefe196d35cfeaa55f63a6222",
+    "model_8.txt": "33a1bebb11bf5a11e27c75575f7dfdac799b21a0e5cd5ee6a6b9d46eb739d0d9",
+    "requirements.txt": "e184b664ee67d0ce7f71326f516e49051cc45c8a0e716bea4827d35d15d09957",
+    "model_1.txt": "ef5429d3484521392539abb82735b5be7b807297d7dd264c497872d64752e245",
+    "model_4.txt": "b4c50f04acb1cd25dc53c7eba9e50403f21ad3073dca1dd92fe98b4638ab5fa8",
+    "model_12.txt": "4aa4abf7761d52054d6f1e483db8c57bfd6eb8514d7a7212b0895c69aed0602f",
+    "model_16.txt": "bbc4202393193ab5e1d12ab9e3291262a24f111cc68f318bc652d6de415f13f7",
+    "model_7.txt": "9bae8f2b2b7de15a2900f7a6263abd3ac7307aded860f1280b636b5ce03afd6d",
+    "metrics.json": "b0239c9859357ca928d0a0091e0fb378accef72a2fe8bb761b60cc87a1917788",
+    "model_15.txt": "fc6bb7486de4f408466b16d171d9e6eb47555fc6fb6e64c1288fd27e675d2663",
+    "model_14.txt": "d852dec38b54622e88c042a39c9910c5b2df29679a0d00e1302caa7a4e40b42e",
+    "model_6.txt": "dc2bfd370b90ca853f64cdde50e178f780bd8d34df7301f7858b54b63845eedc",
+    "model_11.txt": "d3304caea9eca2d1e149143f7e1e4cf9a05fbe9651000b2c38364850d26eb77c",
+    "model_9.txt": "b18a2dbbd5ba2dc959f41455da5ba6cb3e08a8b67d3b531da1a627638af48bf7",
+    "model_10.txt": "c3cd36ab228bd9d2b8d0b2a469ed9cb657f2ee054af2ee8f9147418069515628",
+    "model_13.txt": "a25184f39642b8c9d7475d9d4e0c196ec2f4573a72929227dcbc41e4dd18e7d7",
+    "model_3.txt": "d99c8a80ec7e143eed84b6abb915ffc4cd5a0ef78ed3e3bd85f02b0b48022279",
+    "metadata.json": "a852e1732e8fce752b835bad83e3b494dc92554453882c43c4019e730215d13f",
+    "model_2.txt": "fea89ecbae80894b8a68a38cf0d1e0e777ba3707efbd477fb2cb7ea1bf01784a"
+  },
+  "added_members": [
+    "code/inference.py",
+    "code/requirements.txt"
+  ]
+}

@@ -85,11 +85,13 @@ def predict_fn(data, model: dict) -> list[float]:
     if missing:
         raise ValueError(f"features manquantes dans l'entrée : {missing[:5]}")
 
-    horizons = (
-        frame["horizon"].astype(int).to_numpy()
-        if "horizon" in frame.columns
-        else np.full(len(frame), DEFAULT_HORIZON)
-    )
+    if "horizon" in frame.columns:
+        values = pd.to_numeric(frame["horizon"], errors="raise").to_numpy(dtype=float)
+        if not np.isfinite(values).all() or not ((values >= 1) & (values == np.floor(values))).all():
+            raise ValueError("les horizons doivent être des entiers positifs")
+        horizons = values.astype(int)
+    else:
+        horizons = np.full(len(frame), DEFAULT_HORIZON)
     out = np.full(len(frame), np.nan, dtype=float)
     for horizon, booster in model["models"].items():
         mask = horizons == horizon

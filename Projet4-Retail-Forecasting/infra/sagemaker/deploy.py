@@ -29,7 +29,7 @@ from infra.sagemaker.batch_transform import (
     approved_model,
     build_inference_rows,
     ensure_model,
-    model_features,
+    model_metadata,
     read_curated,
 )
 from infra.sagemaker.pipeline import _boto_session
@@ -41,7 +41,7 @@ MODEL_NAME = "retail-demand-lgbm-model"
 CONFIG_NAME = "retail-demand-lgbm-config"
 MEMORY_MB = 2048  # 2 Go : suffisant (modèles LightGBM de quelques Mo)
 MAX_CONCURRENCY = 2
-HORIZONS = [1, 7, 14, 28]
+HORIZONS = list(range(1, 17))
 
 
 def _sm():
@@ -52,11 +52,14 @@ def _runtime():
     return _boto_session().client("sagemaker-runtime")
 
 
-def up(wait: bool = True) -> int:
+def up(wait: bool = True, model_url: str | None = None) -> int:
     """Crée le modèle, la configuration serverless et l'endpoint."""
     sm = _sm()
-    model_url, image, version = approved_model(sm)
-    print(f"[deploy] version approuvée v{version} : {model_url}")
+    approved_url, image, version = approved_model(sm)
+    if model_url and model_url != approved_url:
+        raise ValueError("l'endpoint doit utiliser exactement l'artefact actif validé")
+    model_url = approved_url
+    print(f"[deploy] version active v{version} : {model_url}")
 
     ensure_model(sm, MODEL_NAME, image, model_url)
 
@@ -108,9 +111,12 @@ def sample_rows():
     s3 = s3_client()
     sm = _sm()
     model_url, _image, _version = approved_model(sm)
-    features = model_features(s3, model_url)
+    metadata = model_metadata(s3, model_url)
+    features = metadata["features"]
     sales = read_curated(s3)
-    rows = build_inference_rows(sales, features, HORIZONS)
+    rows = build_inference_rows(
+        sales, features, metadata["horizons"], levels=metadata.get("categorical_levels")
+    )
     premiere = rows.iloc[0]
     selection = rows[
         (rows["store_id"] == premiere["store_id"])
@@ -174,13 +180,15 @@ def main(argv: list[str] | None = None) -> int:
                         choices=["up", "status", "invoke", "down"])
     parser.add_argument("--no-wait", action="store_true",
                         help="rendre la main sans attendre InService")
+    parser.add_argument("--model-url", default=None,
+                        help="artefact S3 imposé (sinon : version approuvée du registre)")
     args = parser.parse_args(argv)
 
     if not SETTINGS.bucket:
         raise SystemExit("S3_BUCKET doit être renseigné (.env)")
 
     if args.action == "up":
-        return up(wait=not args.no_wait)
+        return up(wait=not args.no_wait, model_url=args.model_url)
     if args.action == "invoke":
         return invoke()
     if args.action == "down":

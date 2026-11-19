@@ -1,6 +1,15 @@
 # Rapport technique — Retail ML Forecasting (Projet 4)
 
-**Prévision de la demande J+1 à J+28 par (magasin, article) sur AWS**
+**Prévision des ventes observées J+1 à J+16 par (magasin, article) sur AWS**
+
+> Validation du 19 novembre 2026 : le protocole corrigé utilise un split temporel
+> purgé et une évaluation indépendante des 16 horizons. WAPE moyen **0,422609**
+> contre **0,559139** pour la baseline saisonnière (gain **24,4 %**).
+> Preuve : [rapport AWS indépendant](evidence/aws_evaluation.json).
+> Le parcours actuel et son état de validation sont décrits dans
+> [learner_lab_workflows.md](learner_lab_workflows.md). Les sections ci-dessous
+> conservent les résultats historiques (4 horizons, anciennes versions du
+> registre) ; ils ne constituent pas la validation du nouveau déploiement.
 
 Ce rapport couvre les quatre points demandés : le pipeline complet, les services
 AWS utilisés, les choix de modèle et d'hyperparamètres, et la logique

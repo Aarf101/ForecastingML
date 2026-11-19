@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-19",
+  "training_recovery_execution": "arn:aws:states:us-east-1:654654161593:execution:retail-training:edd8dfa5-b7e4-4dc5-9690-768aebcac892",
+  "inference_execution": "arn:aws:states:us-east-1:654654161593:execution:retail-inference:36db742d-8175-40d7-618d-3f84226e9ce8_5f8822ea-8442-2eed-73ca-41c78eeaf246",
+  "source_pipeline_execution": "arn:aws:sagemaker:us-east-1:654654161593:pipeline/retail-forecast-mlops/execution/yjcjidcc64i4",
+  "training_recovery_status": "SUCCEEDED",
+  "inference_status": "SUCCEEDED",
+  "eventbridge": {
+    "executionArn": "arn:aws:states:us-east-1:654654161593:execution:retail-inference:36db742d-8175-40d7-618d-3f84226e9ce8_5f8822ea-8442-2eed-73ca-41c78eeaf246",
+    "eventbridge_event_id": "36db742d-8175-40d7-618d-3f84226e9ce8",
+    "temporary_rule": "retail-validation-8da20a3ce3b7"
+  },
+  "forecast_rows": 19200,
+  "series": 1200,
+  "horizons": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "same_model_daily": true,
+  "new_forecast_daily": true,
+  "before_daily": {
+    "metrics": {
+      "test_wape": 0.42260937238186896,
+      "baseline_wape": 0.5591388615206528,
+      "test_bias": 0.004767751426427376
+    },
+    "model_package_arn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/6",
+    "forecast_key": "forecast/runs/423c7c3650f244dda43d4ab0fa86b4c4/forecast.parquet",
+    "run_id": "423c7c3650f244dda43d4ab0fa86b4c4",
+    "model_data_url": "s3://retail-forecast-654654161593-ayoub/models/serving/8e0b9a1f433a86f67c2e6bba40bea957e4972bc7924802d2fb818d97be0b3de5/model.tar.gz",
+    "target": "observed_sales",
+    "active_series": 1200,
+    "historical_series": 1255,
+    "previous": null
+  },
+  "after_daily": {
+    "metrics": {
+      "test_wape": 0.42260937238186896,
+      "baseline_wape": 0.5591388615206528,
+      "test_bias": 0.004767751426427376
+    },
+    "model_package_arn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/6",
+    "forecast_key": "forecast/runs/8cacb06bc62c42dd84c221589ccc910f/forecast.parquet",
+    "run_id": "8cacb06bc62c42dd84c221589ccc910f",
+    "model_data_url": "s3://retail-forecast-654654161593-ayoub/models/serving/8e0b9a1f433a86f67c2e6bba40bea957e4972bc7924802d2fb818d97be0b3de5/model.tar.gz",
+    "target": "observed_sales",
+    "active_series": 1200,
+    "historical_series": 1255,
+    "previous": {
+      "metrics": {
+        "test_wape": 0.42260937238186896,
+        "baseline_wape": 0.5591388615206528,
+        "test_bias": 0.004767751426427376
+      },
+      "model_package_arn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/6",
+      "forecast_key": "forecast/runs/423c7c3650f244dda43d4ab0fa86b4c4/forecast.parquet",
+      "run_id": "423c7c3650f244dda43d4ab0fa86b4c4",
+      "model_data_url": "s3://retail-forecast-654654161593-ayoub/models/serving/8e0b9a1f433a86f67c2e6bba40bea957e4972bc7924802d2fb818d97be0b3de5/model.tar.gz",
+      "target": "observed_sales",
+      "active_series": 1200,
+      "historical_series": 1255
+    }
+  },
+  "source_pipeline_status": "Failed",
+  "source_pipeline_failure": "Registration metadata format rejected after independent evaluation and GateWAPE succeeded; repaired through verified recovery, without retraining."
+}

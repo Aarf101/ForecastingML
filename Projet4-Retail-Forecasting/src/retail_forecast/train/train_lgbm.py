@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from retail_forecast.evaluate.metrics import bias, rmse, wape
-from retail_forecast.features.build import build_features, time_split, xy
+from retail_forecast.features.build import active_catalog, build_features, time_split, xy
 
 DEFAULT_PARAMS = {
     "objective": "regression",
@@ -77,8 +77,8 @@ def sample_series(df: pd.DataFrame, frac: float, seed: int = 42) -> pd.DataFrame
 
 
 def seasonal_naive(df: pd.DataFrame) -> np.ndarray:
-    """Baseline : ventes du même jour de la semaine précédente (lag 7)."""
-    return df["lag_7"].to_numpy(dtype=float)
+    """Baseline : dernier même jour de semaine que la cible, connu à l'origine."""
+    return df["seasonal_naive"].to_numpy(dtype=float)
 
 
 def train_local(
@@ -88,7 +88,7 @@ def train_local(
     early_stopping_rounds: int = 50,
 ) -> dict:
     """Entraîne le modèle global et compare à la baseline saisonnière."""
-    feats = build_features(sales, horizon=horizon)
+    feats = build_features(active_catalog(sales), horizon=horizon)
     train, valid, test = time_split(feats)
 
     X_tr, y_tr = xy(train)
@@ -103,6 +103,7 @@ def train_local(
 
     model_wape, base_wape = wape(y_te, pred), wape(y_te, base)
     return {
+        "evaluation_protocol": "rolling_origin_purged_v2",
         "horizon": horizon,
         "n_train": int(len(train)),
         "n_valid": int(len(valid)),

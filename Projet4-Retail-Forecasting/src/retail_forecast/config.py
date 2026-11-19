@@ -79,7 +79,7 @@ class Settings:
             ingest_backend=e.get("INGEST_BACKEND", "kafka").lower(),
             kafka_bootstrap=e.get("KAFKA_BOOTSTRAP", "localhost:19092"),
             kafka_topic=e.get("KAFKA_TOPIC", "sales.events"),
-            forecast_horizon=int(e.get("FORECAST_HORIZON", "28")),
+            forecast_horizon=int(e.get("FORECAST_HORIZON", "16")),
             model_name=e.get("MODEL_NAME", "lgbm-global"),
             wape_threshold=float(e.get("WAPE_THRESHOLD", "0.30")),
             llm_provider=e.get("LLM_PROVIDER", "ollama").lower(),

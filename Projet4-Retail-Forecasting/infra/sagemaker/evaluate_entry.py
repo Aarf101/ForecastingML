@@ -10,17 +10,15 @@ dans cet ordre :
    features proviennent de l'étape ``PreprocessFeatures`` (même table que
    l'entraînement) ; sur un artefact plus ancien, il les recalcule depuis
    ``curated/``.
-2. **Repli explicite** — si les dépendances (LightGBM, pyarrow) ou le paquet
-   ``retail_forecast`` sont indisponibles, il republie les métriques de
-   l'artefact en marquant ``"independent": false``. Jamais de chiffre inventé,
-   jamais d'étape muette.
+2. **Échec explicite** — si le recalcul indépendant est impossible, l'étape
+   échoue et empêche l'approbation automatique du modèle.
 
 Montage SageMaker :
 
 * entrée  : ``/opt/ml/processing/input/model/model.tar.gz``
 * entrée  : ``/opt/ml/processing/input/curated/`` (features précalculées, ou
   Parquet de ``curated/sales/`` pour un artefact antérieur)
-* entrée  : ``/opt/ml/processing/input/code/sourcedir.tar.gz`` (paquet du projet)
+* entrée  : ``/opt/ml/processing/input/package/sourcedir.tar.gz`` (paquet du projet)
 * sortie  : ``/opt/ml/processing/output/evaluation.json``
 """
 
@@ -35,7 +33,7 @@ from pathlib import Path
 
 INPUT = Path("/opt/ml/processing/input/model")
 CURATED = Path("/opt/ml/processing/input/curated")
-CODE = Path("/opt/ml/processing/input/code")
+CODE = Path("/opt/ml/processing/input/package")
 OUTPUT = Path("/opt/ml/processing/output")
 
 TEST_DAYS = 28
@@ -81,9 +79,8 @@ def _extract(tar_path: Path, dest: Path) -> None:
 def _recompute(archive: Path) -> dict | None:
     """Recalcule le WAPE de test depuis ``curated/`` et l'artefact.
 
-    Renvoie ``{horizon: wape}`` ou ``None`` si le recalcul n'est pas possible
-    (pas de données montées, dépendance absente). Ne lève jamais : l'étape doit
-    rester utilisable même dégradée.
+    Renvoie ``{horizon: wape}`` ou ``None`` si le recalcul n'est pas possible.
+    Le point d'entrée bloque alors la publication du modèle.
     """
     try:
         import numpy as np  # noqa: F401
@@ -120,6 +117,7 @@ def _recompute(archive: Path) -> dict | None:
         from retail_forecast.features.build import (
             TARGET,
             add_target,
+            active_catalog,
             build_features,
             time_split,
         )
@@ -140,15 +138,19 @@ def _recompute(archive: Path) -> dict | None:
             base = sales if TARGET in sales.columns else add_target(sales, horizon=1)
             print("[evaluate] features précalculées relues (pas de recalcul)")
         else:
-            base = build_features(sales, horizon=1, dropna=False)
+            base = build_features(
+                active_catalog(sales), horizon=1, dropna=False, levels=metadata.get("categorical_levels")
+            )
             print("[evaluate] features recalculées depuis curated/")
 
         resultat: dict[str, float] = {}
         for horizon in metadata["horizons"]:
             df = add_target(base.drop(columns=[TARGET]), horizon=horizon)
-            df = df.dropna(subset=[*features, TARGET])
+            df = df.dropna(subset=[*features, TARGET, "seasonal_naive"])
+            split = metadata.get("split", {})
             _train, _valid, test = time_split(
-                df, valid_days=VALID_DAYS, test_days=TEST_DAYS
+                df, valid_days=split.get("valid_days", VALID_DAYS),
+                test_days=split.get("test_days", TEST_DAYS),
             )
             booster = lgb.Booster(model_file=str(model_dir / f"model_{horizon}.txt"))
             pred = np.clip(booster.predict(test[features]), 0.0, None)
@@ -172,10 +174,18 @@ def main() -> int:
     } or {str(summary.get("horizon", 1)): float(summary["test_wape"])}
 
     recalcule = _recompute(archive)
-    source = "recompute" if recalcule else "artifact"
-    wapes = recalcule or artefact
+    if not recalcule or set(recalcule) != set(artefact):
+        raise SystemExit("évaluation indépendante incomplète : approbation bloquée")
+    import math
+
+    if any(not math.isfinite(w) or w < 0 for w in recalcule.values()):
+        raise SystemExit("WAPE indépendant invalide : approbation bloquée")
+    source = "recompute"
+    wapes = recalcule
     valeurs = list(wapes.values())
     mean_wape = sum(valeurs) / len(valeurs)
+    baselines = [m["baseline_wape"] for m in summary.get("by_horizon", {}).values()]
+    baseline = sum(baselines) / len(baselines) if baselines else summary["baseline_wape"]
 
     best_h = min(wapes, key=lambda h: wapes[h])
     worst_h = max(wapes, key=lambda h: wapes[h])
@@ -193,8 +203,10 @@ def main() -> int:
     report = {
         "regression_metrics": {
             "test_wape": _metric(mean_wape),
-            "baseline_wape": _metric(summary["baseline_wape"]),
-            "improvement_vs_baseline": _metric(summary["improvement_vs_baseline"]),
+            "baseline_wape": _metric(baseline),
+            "improvement_vs_baseline": _metric(
+                (baseline - mean_wape) / baseline if baseline else 0.0
+            ),
         },
         "by_horizon": {
             h: {

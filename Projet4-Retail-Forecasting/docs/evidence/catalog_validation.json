@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-19",
+  "environment": "AWS Academy Learner Lab, us-east-1",
+  "curated_rows": 926000,
+  "active_rows": 876000,
+  "active_stores": 20,
+  "active_items": 60,
+  "matching_local_keys": 876000,
+  "differences": {"units": 0, "unit_price": 0, "promo": 0, "is_holiday": 0},
+  "local_training_on_downloaded_active_aws_data": {
+    "sample_fraction": 0.15,
+    "sample_seed": 42,
+    "estimators": 400,
+    "horizons": {
+      "1": {"test_wape": 0.4268082840971215, "baseline_wape": 0.5672681418320473},
+      "16": {"test_wape": 0.41765881012047185, "baseline_wape": 0.5627345603026391}
+    }
+  },
+  "note": "Ces scores sont calculés localement sur les données AWS téléchargées ; ils ne sont pas les scores du Training Job cloud complet. Les 50000 lignes anciennes restent dans S3."
+}

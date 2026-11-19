@@ -27,7 +27,8 @@ param(
         'kafka-status', 'kafka-down', 'aws-ingest-all', 'aws-env-full',
         'aws-setup-only', 'aws-upload-repo', 'aws-teardown', 'aws-teardown-go',
         'aws-pipeline-up', 'aws-pipeline-run', 'aws-pipeline-status',
-        'aws-pipeline-down',
+        'aws-pipeline-down', 'aws-workflows-up', 'aws-workflows-print',
+        'aws-inference-run', 'aws-dashboard',
         'dataset-info', 'ingest-dataset',
         'sagemaker-train', 'sagemaker-register', 'sagemaker-transform',
         'sagemaker-tune', 'sagemaker-pipeline', 'sagemaker-pipeline-run',
@@ -148,11 +149,15 @@ Les scripts .sh (make up / produce / consume) nécessitent Git Bash ou WSL.
     # Cree l'environnement d'ingestion et s'arrete la (aucune donnee envoyee).
     'aws-setup-only'   { Invoke-Py @('-m', 'infra.aws.ingest_all', '--setup-only') }
 
-    # Orchestration AWS : Step Functions + Lambda gate + regle EventBridge.
-    # (l'argument est positionnel : up | run | status | print | down)
-    'aws-pipeline-up'     { Invoke-Py @('-m', 'infra.aws.orchestrate', 'up') }
-    'aws-pipeline-run'    { Invoke-Py @('-m', 'infra.aws.orchestrate', 'run') }
-    'aws-pipeline-status' { Invoke-Py @('-m', 'infra.aws.orchestrate', 'status') }
+    # Workflows recommandes : training mensuel et inference quotidienne.
+    'aws-pipeline-up'     { Invoke-Py @('-m', 'infra.aws.workflows', 'up') }
+    'aws-pipeline-run'    { Invoke-Py @('-m', 'infra.aws.workflows', 'run', '--mode', 'training', '--wait') }
+    'aws-pipeline-status' { Invoke-Py @('-m', 'infra.aws.workflows', 'status') }
+    'aws-workflows-up'    { Invoke-Py @('-m', 'infra.aws.workflows', 'up') }
+    'aws-workflows-print' { Invoke-Py @('-m', 'infra.aws.workflows', 'print') }
+    'aws-inference-run'   { Invoke-Py @('-m', 'infra.aws.workflows', 'run', '--mode', 'inference', '--wait') }
+    'aws-dashboard'       { Invoke-Py @('-m', 'infra.aws.dashboard_host') }
+    # Compatibilite : ce down concerne uniquement les anciennes ressources.
     'aws-pipeline-down'   { Invoke-Py @('-m', 'infra.aws.orchestrate', 'down') }
 
     # Datasets externes : $env:SOURCE (obligatoire), $env:DEST, $env:MAPPING, $env:SET

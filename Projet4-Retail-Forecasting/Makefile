@@ -52,7 +52,7 @@ help:
 	@echo "make aws-pipeline-up  Step Functions + EventBridge (orchestration AWS)"
 	@echo "make aws-pipeline-run execute le pipeline de bout en bout"
 	@echo "make aws-pipeline-status etat machine/regle/executions"
-	@echo "make aws-pipeline-down supprime machine + regle + lambda"
+	@echo "make aws-pipeline-down nettoie uniquement l ancienne orchestration"
 	@echo "make aws-full-run     pipeline complet dans AWS (ingestion -> transform -> athena)"
 	@echo "make aws-upload-repo  depose le code dans S3 (pour bootstrap dans le lab)"
 	@echo "make aws-run          idem aws-full-run, en Python pur (sans bash)"
@@ -281,13 +281,13 @@ aws-ingest-down:
 
 # --- orchestration 100 % AWS : Step Functions + EventBridge ------------------
 aws-pipeline-up:
-	$(PY) -m infra.aws.orchestrate up
+	$(PY) -m infra.aws.workflows up
 
 aws-pipeline-run:
-	$(PY) -m infra.aws.orchestrate run
+	$(PY) -m infra.aws.workflows run --mode training --wait
 
 aws-pipeline-status:
-	$(PY) -m infra.aws.orchestrate status
+	$(PY) -m infra.aws.workflows status
 
 aws-pipeline-asl:
 	$(PY) -m infra.aws.orchestrate print
@@ -318,3 +318,18 @@ clean:
 	rm -rf .pytest_cache reports/*.json
 	find . -name '__pycache__' -not -path './.venv/*' -exec rm -rf {} +
 
+
+# Deux workflows managés, entraînement mensuel et inférence quotidienne.
+aws-workflows-print:
+	$(PY) -m infra.aws.workflows print
+
+aws-workflows-up:
+	$(PY) -m infra.aws.workflows up
+
+aws-inference-run:
+	$(PY) -m infra.aws.workflows run --mode inference --wait
+
+aws-dashboard:
+	$(PY) -m infra.aws.dashboard_host
+
+.PHONY: aws-workflows-print aws-workflows-up aws-inference-run aws-dashboard

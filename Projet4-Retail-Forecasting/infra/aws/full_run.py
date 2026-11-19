@@ -73,7 +73,7 @@ def _wait_for_batches(timeout: int = 240) -> int:
 def _report() -> None:
     """État final : ingestion + orchestration."""
     subprocess.call([sys.executable, "-m", "infra.aws.kinesis_ingest", "status"])
-    subprocess.call([sys.executable, "-m", "infra.aws.orchestrate", "status"])
+    subprocess.call([sys.executable, "-m", "infra.aws.workflows", "status"])
 
 
 # nom -> (fonction, description)
@@ -88,11 +88,11 @@ STEPS = {
     "ingest-run": (lambda: _python("infra.aws.kinesis_ingest", "run", "--max-seconds", "300"),
                    "rejoue les événements dans Kinesis"),
     "ingest-wait": (lambda: _wait_for_batches(), "attend le flush Firehose"),
-    "orchestrate-up": (lambda: _python("infra.aws.orchestrate", "up"),
+    "orchestrate-up": (lambda: _python("infra.aws.workflows", "up"),
                        "job Glue + state machine + EventBridge + Lambda de gate"),
-    "orchestrate-run": (lambda: _python("infra.aws.orchestrate", "run"),
+    "orchestrate-run": (lambda: _python("infra.aws.workflows", "run", "--mode", "training", "--wait"),
                         "Glue -> Training -> gate WAPE -> Registry"),
-    "transform": (lambda: _python("infra.sagemaker.batch_transform"),
+    "transform": (lambda: _python("infra.aws.workflows", "run", "--mode", "inference", "--wait"),
                   "Batch Transform -> forecast/"),
     "athena": (lambda: _python("infra.athena.setup"), "tables externes + KPI"),
 }

@@ -3,8 +3,9 @@
 Deux objets : un *model package group* (le conteneur logique, créé une fois) et
 un *model package* (une version, avec ses métriques et son statut d'approbation).
 
-C'est la boîte « Model Registry / Nouvelle version » du diagramme et ce qui
-permet au pipeline d'inférence de ne charger qu'un modèle **approuvé**.
+Ce parcours autonome conserve le statut PendingManualApproval. Seul le
+pipeline avec évaluation indépendante peut approuver automatiquement ; le
+manifeste actif est ensuite publié après validation de l'inférence.
 
 Usage::
 
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 
 from infra.sagemaker.launch import IMAGE, read_metrics, _sm_client
 from retail_forecast.config import SETTINGS
@@ -54,8 +56,8 @@ def gate_decision(metrics: dict, threshold: float) -> tuple[float, bool, str]:
     artefacts antérieurs à l'ajout de ``mean_wape`` retombent sur le WAPE de
     l'horizon principal.
     """
-    wape_gate = metrics.get("mean_wape", metrics["test_wape"])
-    approuve = wape_gate <= threshold
+    wape_gate = float(metrics["mean_wape"] if "mean_wape" in metrics else metrics["test_wape"])
+    approuve = math.isfinite(wape_gate) and 0 <= wape_gate <= threshold
     return wape_gate, approuve, "Approved" if approuve else "PendingManualApproval"
 
 
@@ -73,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
     # horizons s'il est présent (nouveaux artefacts), sinon celui de l'horizon
     # principal (artefacts d'avant l'ajout de mean_wape).
     gate_wape, approved, status = gate_decision(metrics, args.threshold)
+    # Le chemin autonome ne dispose pas de preuve indépendante.
+    approved, status = False, "PendingManualApproval"
     model_url = f"s3://{SETTINGS.bucket}/models/{job}/output/model.tar.gz"
 
     ensure_group(sm)

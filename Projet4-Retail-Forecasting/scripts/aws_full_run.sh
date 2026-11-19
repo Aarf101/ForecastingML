@@ -61,23 +61,23 @@ fi
 
 if [ "$SKIP_ORCH" -eq 0 ]; then
   step "7. orchestration : job Glue + Step Functions + EventBridge"
-  $PY -m infra.aws.orchestrate up
+  $PY -m infra.aws.workflows up
 
   aws glue get-job --job-name retail-etl-raw-to-curated >/dev/null 2>&1 \
     || fail "job Glue absent après 'orchestrate up'"
 
   step "8. exécution Glue -> Training -> gate WAPE -> Registry"
-  $PY -m infra.aws.orchestrate run
+  $PY -m infra.aws.workflows run --mode training --wait
 fi
 
 step "9. Batch Transform -> forecast/"
-$PY -m infra.sagemaker.batch_transform
+$PY -m infra.aws.workflows run --mode inference --wait
 
 step "10. Athena : tables + KPI"
 $PY -m infra.athena.setup
 
 step "état final"
 $PY -m infra.aws.kinesis_ingest status || true
-$PY -m infra.aws.orchestrate status || true
+$PY -m infra.aws.workflows status || true
 echo
 echo "Terminé. Penser à : make aws-ingest-down && make aws-pipeline-down && make aws-teardown-go"

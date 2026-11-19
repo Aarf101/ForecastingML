@@ -1,0 +1,27 @@
+{
+  "evaluation_protocol": "rolling_origin_purged_v2",
+  "horizon": 1,
+  "n_train": 109620,
+  "n_valid": 9900,
+  "n_test": 5040,
+  "best_iteration": 179,
+  "test_wape": 0.4268082840971215,
+  "test_rmse": 3.9273546748453128,
+  "test_bias": -0.007181960481518071,
+  "baseline_wape": 0.5672681418320473,
+  "baseline_rmse": 5.241395064505462,
+  "baseline_bias": -0.04941904104242351,
+  "improvement_vs_baseline": 0.24760751993104552,
+  "feature_importance": {
+    "roll_mean_28": 967,
+    "roll_mean_14": 742,
+    "roll_mean_7": 700,
+    "lag_28": 642,
+    "week": 569,
+    "roll_std_7": 561,
+    "lag_35": 544,
+    "lag_14": 536,
+    "lag_7": 522,
+    "dow": 503
+  }
+}

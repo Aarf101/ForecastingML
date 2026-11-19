@@ -85,12 +85,20 @@ aws_ firehose delete-delivery-stream --delivery-stream-name "$STREAM" >/dev/null
   && echo "  stream supprimé (recréable avec : make aws-firehose-up)" \
   || echo "  stream déjà absent ou en cours de suppression"
 
-say "5/6 · endpoint LLM + notebook"
-aws_ sagemaker delete-endpoint --endpoint-name "$ENDPOINT" 2>/dev/null \
-  && echo "  endpoint supprimé" || echo "  endpoint déjà absent"
-for cfg in "${ENDPOINT}-config-v2" "${ENDPOINT}-config"; do
-  aws_ sagemaker delete-endpoint-config --endpoint-config-name "$cfg" 2>/dev/null \
-    && echo "  config supprimée : $cfg" || true
+say "5/6 · endpoints (LLM + modèle de prévision) et notebook"
+# Deux endpoints distincts : l'agent LLM et le serving LightGBM.
+for ep in "$ENDPOINT" "${DEMAND_ENDPOINT:-retail-demand-lgbm}"; do
+  aws_ sagemaker delete-endpoint --endpoint-name "$ep" 2>/dev/null \
+    && echo "  endpoint supprimé : $ep" || echo "  endpoint absent : $ep"
+  for suffix in -config -config-v2; do
+    aws_ sagemaker delete-endpoint-config \
+      --endpoint-config-name "${ep}${suffix}" 2>/dev/null || true
+  done
+done
+# Ressources Model créées pour le serving / les Batch Transform.
+for m in retail-demand-lgbm-model; do
+  aws_ sagemaker delete-model --model-name "$m" 2>/dev/null \
+    && echo "  modèle supprimé : $m" || true
 done
 aws_ sagemaker stop-notebook-instance --notebook-instance-name "$NOTEBOOK" 2>/dev/null \
   && echo "  notebook arrêté (le disque persiste, pas de facture compute)" \

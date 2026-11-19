@@ -134,7 +134,7 @@ def _stage_source_dir() -> str:
     return tmp
 
 
-def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
+def build_pipeline(threshold: float, horizons: str = ",".join(map(str, range(1, 17)))):
     """Construit l'objet ``Pipeline`` (aucun appel AWS tant qu'on ne l'upsert pas)."""
     _require_sdk()
     from sagemaker.inputs import TrainingInput
@@ -168,6 +168,7 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
     # les étapes Processing : pas de résolution d'image « processing » par version.
     processor = ScriptProcessor(
         command=["python3"],
+        env={"PIP_BREAK_SYSTEM_PACKAGES": "1"},
         image_uri=IMAGE,
         instance_type=INSTANCE,
         instance_count=1,
@@ -191,7 +192,7 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
             ),
             ProcessingInput(
                 source=code_uri,
-                destination="/opt/ml/processing/input/code",
+                destination="/opt/ml/processing/input/package",
             ),
         ],
         outputs=[
@@ -278,14 +279,17 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
             # celle utilisée par l'entraînement.
             ProcessingInput(
                 source=code_uri,
-                destination="/opt/ml/processing/input/code",
+                destination="/opt/ml/processing/input/package",
             ),
         ],
         outputs=[
             ProcessingOutput(
                 output_name="evaluation",
                 source="/opt/ml/processing/output",
-                destination=f"s3://{bucket}/evaluation/",
+                destination=Join(
+                    on="/", values=[f"s3://{bucket}/evaluation",
+                                    ExecutionVariables.PIPELINE_EXECUTION_ID],
+                ),
             )
         ],
         code=str(EVAL_SCRIPT),
@@ -317,12 +321,12 @@ def build_pipeline(threshold: float, horizons: str = "1,7,14,28"):
         model_package_group_name=MODEL_GROUP,
         approval_status="Approved",
         customer_metadata_properties={
-            "gate": f"mean_wape <= {threshold}",
-            "horizons": horizons,
+            "gate": f"mean_wape_le_{threshold}",
+            "horizons": horizons.replace(",", "-"),
             "pipeline": PIPELINE_NAME,
             # Valeurs statiques imposées par le format du step ; le WAPE chiffré
             # est dans le rapport d'évaluation de l'exécution (sortie S3 ci-dessous).
-            "evaluation_prefix": f"s3://{bucket}/evaluation/",
+            "evaluation_uri": qualite,
         },
     )
 
@@ -428,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--threshold", type=float, default=SETTINGS.wape_threshold,
                         help="seuil WAPE du gate (défaut .env)")
-    parser.add_argument("--horizons", default="1,7,14,28")
+    parser.add_argument("--horizons", default=",".join(map(str, range(1, 17))))
     parser.add_argument("--dry-run", action="store_true",
                         help="affiche la définition JSON, n'envoie rien")
     parser.add_argument("--upsert", action="store_true",

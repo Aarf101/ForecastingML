@@ -30,24 +30,32 @@ DDL = [
         units INT, stock_on_hand INT, stockout INT
     ) STORED AS PARQUET
     LOCATION 's3://{SETTINGS.bucket}/curated/sales/'""",
-    f"""CREATE EXTERNAL TABLE IF NOT EXISTS {DATABASE}.forecast (
+    f"""CREATE EXTERNAL TABLE IF NOT EXISTS {DATABASE}.forecast_runs (
         store_id STRING, item_id STRING, origin_date TIMESTAMP, target_date TIMESTAMP,
         horizon INT, forecast_units DOUBLE, model_version STRING,
         model_job STRING, run_date STRING
     ) STORED AS PARQUET
-    LOCATION 's3://{SETTINGS.bucket}/forecast/table/'""",
+    LOCATION 's3://{SETTINGS.bucket}/forecast/runs/'""",
+    f"""CREATE EXTERNAL TABLE IF NOT EXISTS {DATABASE}.active_manifest (
+        forecast_key STRING, model_package_arn STRING
+    ) ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
+    LOCATION 's3://{SETTINGS.bucket}/deployment/'""",
+    f"""CREATE OR REPLACE VIEW {DATABASE}.forecast_active AS
+        SELECT f.* FROM {DATABASE}.forecast_runs f
+        CROSS JOIN {DATABASE}.active_manifest a
+        WHERE f."$path" = concat('s3://{SETTINGS.bucket}/', a.forecast_key)""",
 ]
 
 KPI = {
     "top_articles_90j": f"""
         SELECT item_id, SUM(units) AS unites, ROUND(SUM(units * unit_price), 2) AS ca
         FROM {DATABASE}.curated_sales
-        WHERE date >= TIMESTAMP '2024-10-01 00:00:00'
+        WHERE date > (SELECT MAX(date) - INTERVAL '90' DAY FROM {DATABASE}.curated_sales)
         GROUP BY item_id ORDER BY unites DESC LIMIT 10""",
     "prevision_par_magasin": f"""
         SELECT store_id, horizon, ROUND(SUM(forecast_units), 1) AS unites_prevues
-        FROM {DATABASE}.forecast
-        WHERE horizon IN (1, 7)
+        FROM {DATABASE}.forecast_active
+        WHERE horizon BETWEEN 1 AND 16
         GROUP BY store_id, horizon ORDER BY store_id, horizon""",
 }
 
@@ -113,7 +121,8 @@ def main(argv: list[str] | None = None) -> int:
 
     client = _athena()
     if args.drop:
-        for table in ("forecast", "curated_sales"):
+        run_query(client, f"DROP VIEW IF EXISTS {DATABASE}.forecast_active", "drop forecast_active")
+        for table in ("forecast_runs", "active_manifest", "forecast", "curated_sales"):
             run_query(client, f"DROP TABLE IF EXISTS {DATABASE}.{table}", f"drop {table}")
         print("[athena] tables supprimées — les fichiers Parquet dans S3 sont intacts")
         return 0
