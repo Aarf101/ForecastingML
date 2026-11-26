@@ -5,7 +5,28 @@ Le parcours recommandé est désormais `infra.aws.workflows`, puis
 compatible, mais son gate et `register.py` ne peuvent plus approuver automatiquement
 sur la seule foi des métriques d'entraînement : ils produisent PendingManualApproval.
 
-## Nouvelle exécution du 26 novembre 2026
+## Migration médiane du 26 novembre 2026
+
+Le workflow `median-calendar-20261126-214959` a réussi sans reprise. Le modèle
+actif est maintenant **v8**, profil `median_calendar_v1`, objectif quantile
+alpha 0,5 avec calendrier cible enrichi. Il comprend 48 boosters P50/P10/P90.
+L'évaluation Processing indépendante mesure **WAPE 0,404595**, RMSLE **0,513383**
+et couverture **79,22 %**. Le test historique reste le même que pour v7 ; il
+ne constitue pas un nouveau holdout inédit.
+
+Le Batch Transform a produit **19 200 lignes**, toutes vérifiées numériquement
+contre l'artefact exact évalué (écart maximal nul, points et bornes). Le
+manifeste active v8 et préserve v7 ainsi que son précédent fichier de prévisions.
+Les données du catalogue actif sont identiques aux 876 000 lignes du benchmark ;
+50 000 lignes de séries retirées restent dans curated et sont exclues par
+`active_catalog`, comme avant cette migration.
+
+Voir [le contrat de production](median_production.md) et
+[la preuve complète](evidence/median_aws_integration.json). Les jobs ont terminé,
+le modèle temporaire est supprimé, le notebook est arrêté et les horaires restent
+désactivés. Cette migration n'a pas lancé de nouvel endpoint ou HPO.
+
+## Exécution v7 antérieure du 26 novembre 2026
 
 Le mensuel `771772ac-c47c-4c1c-9442-fb1939c7abf6` a réussi **sans reprise**.
 Toutes les étapes du pipeline `9ber5kxlm3mu`, y compris l’inscription, ont réussi.

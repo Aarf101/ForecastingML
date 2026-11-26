@@ -22,7 +22,8 @@ def main():
     candidate = report["test"][selected]
     gain = 100 * (1 - candidate["mean_wape"] / baseline["mean_wape"])
     lines = ["# LightGBM : erreur absolue et calendrier cible", "",
-             "Expérience locale complète, sans appel AWS ni modification du modèle actif v7.", "",
+             "Lors de cette expérience locale, aucun appel AWS ni changement du modèle alors actif v7. "
+             "L'intégration ultérieure est documentée dans [le parcours de production](median_production.md).", "",
              "## Protocole fixé avant l'évaluation", "",
              f"Réplication synthétique indépendante : seed **{report['protocol']['seed']}**, "
              "20 magasins × 60 articles × 730 jours, même simulateur, bruit et ruptures que le jeu initial. "
@@ -63,8 +64,9 @@ def main():
               "## Limites et reproduction", "",
               "Une seule réplication synthétique ; pas de preuve sur données réelles, pas de "
               "nouvelle exécution AWS, pas de quantiles P10/P90 pour ce candidat. "
-              "Les features sont optionnelles et le pipeline de production conserve son comportement. "
-              "Une promotion demanderait un artefact complet avec intervalles et l'évaluation AWS indépendante.", "",
+              "Cet essai isolait les features sans modifier la production. "
+              "L'intégration ultérieure des intervalles et du pipeline AWS est suivie dans "
+              "[le parcours de production](median_production.md) ; ce rapport conserve les mesures locales.", "",
               "```bash", "make benchmark-median", ".venv/bin/python docs/build_median_report.py", "```", "",
               "Le cache local `data/benchmark/median-calendar/` contient protocole préalable, choix figé, "
               "80 modèles et prédictions. Les données/modèles ne sont pas versionnés. Les mesures "

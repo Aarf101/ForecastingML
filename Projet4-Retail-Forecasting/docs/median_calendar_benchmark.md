@@ -1,6 +1,6 @@
 # LightGBM : erreur absolue et calendrier cible
 
-Expérience locale complète, sans appel AWS ni modification du modèle actif v7.
+Lors de cette expérience locale, aucun appel AWS ni changement du modèle alors actif v7. L'intégration ultérieure est documentée dans [le parcours de production](median_production.md).
 
 ## Protocole fixé avant l'évaluation
 
@@ -39,7 +39,7 @@ Le candidat améliore 16 horizons sur 16, sur 537 600 couples évalués. Le RMSL
 
 ## Limites et reproduction
 
-Une seule réplication synthétique ; pas de preuve sur données réelles, pas de nouvelle exécution AWS, pas de quantiles P10/P90 pour ce candidat. Les features sont optionnelles et le pipeline de production conserve son comportement. Une promotion demanderait un artefact complet avec intervalles et l'évaluation AWS indépendante.
+Une seule réplication synthétique ; pas de preuve sur données réelles, pas de nouvelle exécution AWS, pas de quantiles P10/P90 pour ce candidat. Cet essai isolait les features sans modifier la production. L'intégration ultérieure des intervalles et du pipeline AWS est suivie dans [le parcours de production](median_production.md) ; ce rapport conserve les mesures locales.
 
 ```bash
 make benchmark-median

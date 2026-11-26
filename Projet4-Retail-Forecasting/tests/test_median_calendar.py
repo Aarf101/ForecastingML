@@ -6,6 +6,7 @@ import pytest
 
 from retail_forecast.evaluate.benchmark_median import VARIANTS, select_candidate, temporal_parts
 from retail_forecast.features.target_calendar import add_target_calendar
+from retail_forecast.train.profiles import target_features
 
 
 def test_calendar_uses_only_target_date():
@@ -41,3 +42,22 @@ def test_selection_ignores_test_scores_and_requires_all_horizons():
     assert select_candidate(rows) == "l1_calendar"
     with pytest.raises(ValueError, match="incomplète"):
         select_candidate(rows[:-1])
+
+
+def test_unknown_profile_is_rejected():
+    with pytest.raises(ValueError, match="profil"):
+        target_features(pd.DataFrame(), "unknown")
+
+
+def test_inference_recomputes_calendar_across_year_boundary():
+    from infra.sagemaker.batch_transform import build_inference_rows
+    from retail_forecast.data.simulate import simulate_sales
+    from retail_forecast.features.build import build_features, feature_columns
+
+    sales = simulate_sales(n_stores=1, n_items=1, start="2024-10-31", days=55)
+    frame = target_features(build_features(sales), "median_calendar_v1")
+    rows = build_inference_rows(sales, feature_columns(frame), list(range(1, 17)))
+    expected = add_target_calendar(rows[["target_date"]])
+    for column in expected.columns:
+        np.testing.assert_array_equal(rows[column], expected[column])
+    assert rows.target_is_holiday.sum() >= 3

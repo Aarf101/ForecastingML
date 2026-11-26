@@ -72,6 +72,8 @@ def run_forecast(sm, s3, package_arn, run_id):
             metrics[field] = sum(m[field] for m in metadata["metrics"].values()) / len(metadata["metrics"])
     return {"metrics": metrics, "model_package_arn": package_arn, "forecast_key": key, "run_id": run_id,
             "model_data_url": container["ModelDataUrl"], "target": "observed_sales",
+            "point_statistic": metadata.get("point_statistic", "mean"),
+            "feature_profile": metadata.get("feature_profile", "legacy_l2"),
             "active_series": len(current[["store_id", "item_id"]].drop_duplicates()),
             "historical_series": len(sales[["store_id", "item_id"]].drop_duplicates())}
 

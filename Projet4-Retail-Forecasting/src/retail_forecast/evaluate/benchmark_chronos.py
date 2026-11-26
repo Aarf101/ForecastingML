@@ -17,6 +17,7 @@ import pandas as pd
 from retail_forecast.evaluate.metrics import wape, rmsle, pinball_loss
 from retail_forecast.data.simulate import HOLIDAYS_MMDD
 from retail_forecast.features.build import active_catalog, build_features, add_target, time_split, TARGET
+from retail_forecast.train.profiles import LEGACY_PROFILE, target_features
 
 KEYS = ['store_id', 'item_id', 'date', 'horizon']
 MODEL_REVISION = '29ec3766d36d6f73f0696f85560a422f50e8498c'
@@ -35,6 +36,7 @@ def evaluation_panel(sales: pd.DataFrame, archive: Path) -> pd.DataFrame:
         parts = []
         for horizon in metadata['horizons']:
             data = add_target(base.drop(columns=[TARGET]), horizon)
+            data = target_features(data, metadata.get('feature_profile', LEGACY_PROFILE))
             data = data.dropna(subset=[*features, TARGET, 'seasonal_naive'])
             _, _, test = time_split(data, **metadata['split'])
             test['horizon'] = horizon

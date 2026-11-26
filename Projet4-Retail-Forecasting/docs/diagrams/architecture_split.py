@@ -183,7 +183,7 @@ def draw_inference() -> Path:
 
     node(ax, xs[0], y2, "s3", "S3 curated", "features", GREEN)
     node(ax, xs[1], y2, "sagemaker", "Batch", "16 jours", VIOLET)
-    node(ax, xs[2], y2, "s3", "S3 forecast", "P10 · moyenne · P90", VIOLET)
+    node(ax, xs[2], y2, "s3", "S3 forecast", "P10 · médiane · P90", VIOLET)
     node(ax, xs[3], y2, "dashboard", "Dashboard", "Streamlit", PINK)
 
     arrow(ax, (xs[0] + BW / 2, y1), (xs[1] - BW / 2, y1))

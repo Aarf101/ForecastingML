@@ -1,8 +1,9 @@
 # Chronos-2 — catalogue complet et validation AWS
 
 Cette validation complète le [pilote à 120 séries](chronos_benchmark.md).
-Elle conserve le modèle actif v7 : aucune écriture dans `deployment/active.json`,
+Lors de cet essai, elle a conservé le modèle alors actif v7 : aucune écriture dans `deployment/active.json`,
 aucun changement de calendrier EventBridge, aucune approbation de registre.
+La migration LightGBM médiane ultérieure est suivie dans [le parcours courant](median_production.md).
 
 ## Périmètre et protocole
 

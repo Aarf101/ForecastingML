@@ -21,7 +21,7 @@ Model Monitor et QuickSight restent des options de la cible, non démontrées.
 | ② | Ingestion | topic Kafka `sales.events` (**Redpanda** en local, **Kafka EC2** sur AWS), pont **Firehose DirectPut** | bus d'événements, micro-batch vers le lac de données |
 | ③ | Lake & ETL | **S3** `raw/` (JSON.gz) → **Glue ETL** PySpark via Step Functions (clean, dédup, typage) → **S3** `curated/` (Parquet, partitionné store/date) → **DDL Glue/Athena** | zone brute immuable + zone curée requêtable |
 | ④ | SageMaker ML | **Processing Job** (features) → **Training Job** (LightGBM global) + **HPO** → **Evaluation / ConditionStep** (WAPE) → **Model Registry** | pipeline reproductible avec porte de qualité |
-| ⑤ | Serving | **Endpoint serverless** (temps réel) · **Batch Transform** 16 j → `S3 forecast/` (moyenne et P10/P90) · **Model Monitor optionnel** | deux modes de consommation ; surveillance optionnelle |
+| ⑤ | Serving | **Endpoint serverless** (temps réel) · **Batch Transform** 16 j → `S3 forecast/` (médiane et P10/P90) · **Model Monitor optionnel** | deux modes de consommation ; surveillance optionnelle |
 | ⑥ | Rapport LLM | **LangChain LCEL + Ollama local** : agrégats, prompt, schéma JSON et validation | brief optionnel ; faits vérifiés et recommandations autorisées, sans agent ni RAG |
 | ⑦ | Dashboard | **Streamlit** (QuickSight en option « production ») | restitution métier : KPI, historique, prévisions et P10/P90 |
 | ⑧ | MLOps transversal | **EventBridge** → **Step Functions / SageMaker Pipelines**, CloudWatch, versioning S3, tags de coût, teardown | industrialisation et maîtrise du budget |
@@ -52,9 +52,9 @@ Model Monitor et QuickSight restent des options de la cible, non démontrées.
 | Sujet | Choix | Justification |
 |-------|-------|---------------|
 | Cible | `units[t + h]`, h = 1…16 (direct multi-horizon) | un modèle par horizon évite la propagation d'erreur du récursif |
-| Modèle | LightGBM **global** (catalogue actif), moyenne et quantiles | 1 200 séries × 730 j : calcul tabulaire partagé, borné et reproductible ; Prophet non benchmarké |
+| Modèle | LightGBM **global** (catalogue actif), médiane et quantiles | Profil `median_calendar_v1` : objectif quantile alpha 0,5, aligné sur l'erreur absolue ; anciens artefacts L2 compatibles |
 | Baseline | dernière date disponible du même jour de semaine que la cible | obligatoire pour prouver l'apport : **−24,3 % de WAPE** en local |
-| Features | lags 1/7/14/21/28/35, moyennes & écarts-types glissants 7/14/28, `dow`, `week`, `month`, `is_weekend`, `is_holiday`, `promo`, prix, `price_x_promo`, `lead_time_days` | couvre tendance, saisonnalité, effet promo et structure magasin/article |
+| Features | lags 1/7/14/21/28/35, rolling 7/14/28, calendrier origine, promo/prix connus, calendrier cible enrichi (fériés, week-end, limites du mois, cycles annuels) | [Contrat versionné commun au train et au serving](median_production.md), sans prix ni promotion futur observé |
 | Anti-fuite | `stock_on_hand` et `stockout` **exclus** ; split **temporel purgé**, dates manquantes inconnues | ce sont des conséquences de la demande (censoring) |
 | Métriques | **WAPE** (principale), RMSE, RMSLE, MAPE (hors zéros), pinball P10/P90 et couverture | WAPE reste défini avec des ventes nulles ; le pinball et la couverture évaluent les quantiles, sans garantir une politique de stock |
 | HPO | SageMaker Automatic Model Tuning : `num_leaves`, `learning_rate`, `n_estimators` | 6 essais sur J+1, objectif valid_wape ; durée bornée |
@@ -106,7 +106,7 @@ flowchart LR
     D3 --> D4["Model Registry"]
     D4 --> E1["Endpoint serverless"]
     D4 --> E2["Batch Transform 16 j"]
-    E2 --> E3["S3 forecast/ moyenne·P10·P90 + manifeste"]
+    E2 --> E3["S3 forecast/ médiane·P10·P90 + manifeste"]
     E1 -.-> E4["Model Monitor"]
     E3 --> F1["Rapport LangChain<br/>Ollama local + validation"]
     F1 --> F3["Weekly brief → S3"]

@@ -51,12 +51,15 @@ def test_serving_rejects_invalid_horizons(horizon):
         inference.predict_fn({"x": 1, "horizon": horizon}, {"features": ["x"], "models": {}})
 
 
-def test_training_artifact_independent_evaluation_and_serving(tmp_path, monkeypatch):
+@pytest.mark.parametrize("profile", ["median_calendar_v1", "legacy_l2"])
+@pytest.mark.parametrize("preprocessed", [False, True])
+def test_training_artifact_independent_evaluation_and_serving(tmp_path, monkeypatch, profile, preprocessed):
     """Un vrai petit modèle traverse le même contrat que les jobs cloud."""
     sales = simulate_sales(n_stores=1, n_items=2, days=180, seed=4)
     channel = tmp_path / "input/data/training"
     channel.mkdir(parents=True)
-    sales.to_parquet(channel / "sales.parquet", index=False)
+    training_data = build_features(sales, dropna=False) if preprocessed else sales
+    training_data.to_parquet(channel / "sales.parquet", index=False)
     monkeypatch.setattr(train_entry, "BASE", tmp_path)
     from pathlib import Path
     monkeypatch.setattr(train_entry, "CODE_DIR", Path(train_entry.__file__).parent)
@@ -64,12 +67,24 @@ def test_training_artifact_independent_evaluation_and_serving(tmp_path, monkeypa
     monkeypatch.setitem(train_entry.DEFAULT_PARAMS, "n_jobs", 1)
     monkeypatch.setattr(sys, "argv", ["train_entry.py", "--horizons", ",".join(map(str, range(1, 17))),
                                     "--n-estimators", "5", "--valid-days", "35",
-                                    "--test-days", "14"])
+                                    "--test-days", "14", "--model-profile", profile])
     assert train_entry.main() == 0
     model_dir = tmp_path / "model"
     assert (model_dir / "code/inference.py").read_bytes() == (train_entry.CODE_DIR / "inference.py").read_bytes()
     assert (model_dir / "code/requirements.txt").exists()
     metadata = json.loads((model_dir / "metadata.json").read_text())
+    assert metadata["feature_profile"] == profile
+    assert metadata["point_statistic"] == ("median" if profile == "median_calendar_v1" else "mean")
+    if profile == "median_calendar_v1":
+        assert metadata["params"]["objective"] == "quantile"
+        assert metadata["params"]["alpha"] == 0.5
+        assert "target_is_holiday" in metadata["features"]
+    else:
+        assert metadata["params"]["objective"] == "regression"
+        assert "target_is_holiday" not in metadata["features"]
+        # Un ancien artefact ne déclare aucun profil : l'évaluateur reste compatible.
+        legacy_metadata = {k: v for k, v in metadata.items() if k not in ("feature_profile", "point_statistic")}
+        (model_dir / "metadata.json").write_text(json.dumps(legacy_metadata))
     assert metadata["split"] == {"valid_days": 35, "test_days": 14}
     rows = batch.build_inference_rows(
         sales, metadata["features"], list(range(1, 17)), levels=metadata["categorical_levels"]

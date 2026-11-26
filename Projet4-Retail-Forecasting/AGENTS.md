@@ -8,7 +8,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision des ventes observées J
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (164 tests, aucun service externe requis) |
+| `make test` | pytest (169 tests, aucun service externe requis) |
 | `make benchmark-median` | ablation locale L2/L1/médiane + calendrier, réplication indépendante, sans publication |
 | `make aws-chronos-validate` | surveillance des six partitions, Batch Transform réel et nettoyage du candidat |
 | `make benchmark-chronos` | comparaison exploratoire Chronos-2 / v7, 120 séries, aucun calcul AWS |
@@ -48,6 +48,7 @@ src/retail_forecast/
   evaluate/benchmark_median.py ablation L1/calendrier, validation puis test réservé
   features/target_calendar.py calendrier cible optionnel (jours fériés du simulateur)
   train/train_lgbm.py  miroir local du Training Job SageMaker + baseline saisonnière
+  train/profiles.py    défaut median_calendar_v1 ; compatibilité des artefacts legacy_l2
   ingest/storage.py    unique porte boto3 : raw_key(), gzip JSONL, chunking
   ingest/producer.py   rejoue le parquet → Kafka (--limit, --rate, --loop)
   ingest/to_s3.py      consumer micro-lots → S3, commit Kafka APRÈS écriture
@@ -104,9 +105,10 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
 - ✅ Phase 3 ingestion Kafka → **Firehose DirectPut** → S3 (validée de bout en bout dans AWS :
   20 000 messages, objet Firehose de 164 Ko, 20 000 lignes JSON valides)
 - ✅ Phase 3b ETL `raw/` → `curated/` Parquet (dédup + typage)
-- ✅ Phase 4a : 48 boosters (moyenne et P10/P90 × 16 horizons) entraînés sur AWS, évaluation Processing indépendante :
-  WAPE moyen **0,422609** vs baseline **0,559139** (gain 24,4 %).
-- ✅ Phase 4b : registre **v7**, artefact de serving vérifié et manifeste actif.
+- ✅ Phase 4a : 48 boosters (médiane et P10/P90 × 16 horizons), profil `median_calendar_v1` :
+  WAPE AWS indépendant **0,404595**, RMSLE **0,513383**, couverture **79,22 %**.
+  Référence v7 L2 : WAPE **0,422610** ; même catalogue et même test historique.
+- ✅ Phase 4b : registre **v8**, artefact de serving vérifié et manifeste actif ; v7 précédent préservé.
   La v5 au mauvais layout de handler n'a jamais été activée et est Rejected.
 - ✅ Phase 4c : Batch Transform **19 200 lignes**, 1 200 séries × J+1…J+16 ;
   fichiers immuables `forecast/runs/`, sélection par `deployment/active.json`.
@@ -141,7 +143,17 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
   contre l'artefact v7, sur l'ancien test déjà consulté ; aucune sélection.
   WAPE **0,404560** contre v7 **0,422610**, 16 horizons améliorés ; le résultat
   Chronos **0,414794** porte sur ces mêmes données, mais ce test reste réutilisé.
-- Pas d'exécution AWS, d'intervalles candidats ni de promotion : v7 reste actif.
+- L'expérience initiale était locale et ponctuelle. Le profil est désormais
+  intégré au train local/AWS, à l'évaluation indépendante, au Batch Transform
+  et au HPO ; 169 tests passent (profils ancien/nouveau, brut/prétraité).
+  Voir `docs/median_production.md` et `docs/evidence/median_aws_integration.json`
+  pour le statut de l'exécution AWS et la version effectivement active.
+- Migration terminée : **v8 actif**, workflow `median-calendar-20261126-214959`
+  SUCCEEDED, 19 200 sorties P50/P10/P90 exactement identiques à l'artefact.
+  Catalogue actif de 876 000 lignes identique au benchmark ; 50 000 lignes de
+  séries retirées restent dans curated mais sont exclues du périmètre d'entraînement.
+  Tous les jobs sont terminés, modèle temporaire supprimé, notebook arrêté,
+  aucun endpoint et horaires désactivés. Aucun nouvel essai HPO ou endpoint v8.
 
 ## Benchmark Chronos-2 (exploratoire)
 
@@ -150,7 +162,7 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
 - WAPE : Chronos-2 **0,413009**, LightGBM v7 **0,423396** sur ce même sous-ensemble.
   Gain relatif **2,45 %** ; couverture 79,65 % contre 79,01 %.
 - Exécuté localement sur CPU, sans fine-tuning et sans nouveau job AWS.
-  Le modèle actif reste **v7**. Ne pas extrapoler ce résultat aux 1 200 séries.
+  Lors du pilote le modèle actif était **v7**. Ne pas extrapoler le pilote aux 1 200 séries.
 
 ## Chronos-2 — catalogue complet et AWS validés
 
@@ -162,7 +174,8 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
   refusés par IAM. Aucune politique IAM modifiée, aucun fine-tuning.
 - Batch Transform CPU **19 200 lignes** vérifié contre le handler évalué ; modèle
   temporaire supprimé, aucun calcul actif, horaires désactivés, notebook arrêté.
-- **v7 reste actif** : les workflows mensuel/quotidien restent spécifiques LightGBM.
+- Chronos n'a pas été activé : les workflows mensuel/quotidien restent spécifiques LightGBM.
+  La version active est maintenant v8 médiane (voir la migration ci-dessus).
   Ne pas prétendre que Chronos est activé ou qu’un endpoint Chronos a été testé.
 
 ## Décisions déjà arbitrées (ne pas les reproposer)

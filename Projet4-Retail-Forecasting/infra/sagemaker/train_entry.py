@@ -53,6 +53,7 @@ from retail_forecast.train.train_lgbm import (  # noqa: E402
 )
 
 import lightgbm as lgb  # noqa: E402
+from retail_forecast.train.profiles import DEFAULT_PROFILE, PROFILES, profile_params, target_features
 
 # Colonnes marqueurs de l'étape PreprocessFeatures (cf. preprocess_entry.py).
 PREPROCESSED = ("lag_1", "roll_mean_7")
@@ -73,9 +74,10 @@ def _read_channel(name: str) -> pd.DataFrame:
     return df
 
 
-def _dataset_for_horizon(base: pd.DataFrame, horizon: int) -> pd.DataFrame:
+def _dataset_for_horizon(base: pd.DataFrame, horizon: int, profile=DEFAULT_PROFILE) -> pd.DataFrame:
     """Recolle la cible ``t + horizon`` sur des features calculées une seule fois."""
     df = add_target(base.drop(columns=[TARGET]), horizon=horizon)
+    df = target_features(df, profile)
     feat_cols = [c for c in df.columns if c.startswith(("lag_", "roll_"))]
     return df.dropna(subset=[*feat_cols, TARGET, "seasonal_naive"]).reset_index(drop=True)
 
@@ -88,7 +90,7 @@ def main() -> int:
     # qui rejette l'essai pour une histoire de tiret.
     ap.add_argument("--horizons", default="1")
     ap.add_argument("--n-estimators", "--n_estimators", dest="n_estimators",
-                    type=int, default=DEFAULT_PARAMS["n_estimators"])
+                    type=int, default=400)
     ap.add_argument("--learning-rate", "--learning_rate", dest="learning_rate",
                     type=float, default=DEFAULT_PARAMS["learning_rate"])
     ap.add_argument("--num-leaves", "--num_leaves", dest="num_leaves",
@@ -100,6 +102,7 @@ def main() -> int:
     ap.add_argument("--test-days", "--test_days", dest="test_days",
                     type=int, default=28)
     ap.add_argument("--quantiles", type=str.lower, choices=["true", "false"], default="true")
+    ap.add_argument("--model-profile", "--model_profile", choices=PROFILES, default=DEFAULT_PROFILE)
     args = ap.parse_args()
     horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
 
@@ -125,6 +128,7 @@ def main() -> int:
         "n_estimators": args.n_estimators,
         "learning_rate": args.learning_rate,
         "num_leaves": args.num_leaves,
+        **profile_params(args.model_profile),
     }
 
     model_dir = BASE / "model"
@@ -133,7 +137,7 @@ def main() -> int:
     features: list[str] = []
 
     for horizon in horizons:
-        data = _dataset_for_horizon(base, horizon)
+        data = _dataset_for_horizon(base, horizon, args.model_profile)
         train, valid, test = time_split(
             data, valid_days=args.valid_days, test_days=args.test_days
         )
@@ -206,6 +210,8 @@ def main() -> int:
         json.dumps(
             {
                 "framework": "lightgbm",
+                "feature_profile": args.model_profile,
+                "point_statistic": "median" if args.model_profile == DEFAULT_PROFILE else "mean",
                 "quantiles": [0.1, 0.9] if args.quantiles == "true" else [],
                 "interval_method": "lightgbm_quantile_regression_sorted",
                 "horizons": horizons,

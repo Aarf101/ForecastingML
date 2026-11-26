@@ -117,6 +117,7 @@ def job_request(bucket: str, job_name: str, code_uri: str, args) -> dict:
             "horizons": args.horizons,
             "n-estimators": str(args.estimators),
             "early-stopping-rounds": str(args.early_stopping),
+            "model-profile": getattr(args, "model_profile", "median_calendar_v1"),
         },
         "Tags": [
             {"Key": "project", "Value": "retail-forecast"},
@@ -137,7 +138,8 @@ def read_metrics(client, bucket: str, job_name: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Training Job SageMaker (LightGBM).")
     parser.add_argument("--horizons", default=",".join(map(str, range(1, 17))), help="ex. 1,7,14,28")
-    parser.add_argument("--estimators", type=int, default=300)
+    parser.add_argument("--estimators", type=int, default=400)
+    parser.add_argument("--model-profile", choices=["median_calendar_v1", "legacy_l2"], default="median_calendar_v1")
     parser.add_argument("--early-stopping", type=int, default=40)
     parser.add_argument("--wait", action="store_true", help="attendre la fin du job")
     parser.add_argument("--dry-run", action="store_true", help="ne rien envoyer à AWS")

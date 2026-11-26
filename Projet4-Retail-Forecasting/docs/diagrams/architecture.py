@@ -102,7 +102,7 @@ box(COL[3], r5, BW, BH, 'Model Registry\ncandidat approuvé', 'ml')
 box(COL[4], r2, BW, BH, 'Model Monitor\n+ CloudWatch', 'srv', dashed=True, fs=7.3)
 box(COL[4], r3, BW, BH, 'SageMaker Endpoint\n(serverless)', 'srv', fs=7.3)
 box(COL[4], r4, BW, BH, 'Batch Transform\n16-day forecast', 'srv', fs=7.3)
-box(COL[4], r5, BW, BH, 'S3 forecast/ + actif\nP10 · moyenne · P90', 'srv', fs=7.3)
+box(COL[4], r5, BW, BH, 'S3 forecast/ + actif\nP10 · médiane · P90', 'srv', fs=7.3)
 
 box(COL[5], 3.61, BW, 1.34,
     'Chaîne LangChain\nagrégats des ventes\nprompt structuré\nOllama (local)\nvalidation du texte\nbrief hebdo → S3',

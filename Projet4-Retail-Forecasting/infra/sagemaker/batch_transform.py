@@ -27,6 +27,7 @@ from botocore.exceptions import ClientError, WaiterError
 from infra.sagemaker.launch import _sm_client
 from retail_forecast.config import SETTINGS
 from retail_forecast.features.build import active_catalog, add_target, build_features
+from retail_forecast.features.target_calendar import add_target_calendar
 from retail_forecast.ingest.storage import s3_client
 
 GROUP = "retail-forecast-lgbm"
@@ -91,6 +92,7 @@ def build_inference_rows(
     if not horizons or any(h < 1 for h in horizons) or len(set(horizons)) != len(horizons):
         raise ValueError("horizons requis, positifs et distincts")
     feats = build_features(active_catalog(sales), horizon=1, dropna=False, levels=levels)
+    feats = add_target_calendar(feats)
     last = feats["date"].max()
     origin = feats[(feats["date"] == last) & feats[features].notna().all(axis=1)]
     if origin.empty:
@@ -98,6 +100,7 @@ def build_inference_rows(
     rows = []
     for horizon in horizons:
         block = add_target(origin, horizon=horizon)
+        block = add_target_calendar(block)
         block = block[["store_id", "item_id", "date", *features]]
         block["horizon"] = horizon
         block["target_date"] = last + pd.Timedelta(days=horizon)

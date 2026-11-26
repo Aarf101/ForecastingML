@@ -129,6 +129,7 @@ def _recompute(archive: Path) -> dict | None:
         model_dir.mkdir(exist_ok=True)
         _extract(archive, model_dir)
         metadata = json.loads((model_dir / "metadata.json").read_text())
+        from retail_forecast.train.profiles import LEGACY_PROFILE, target_features
         features = metadata["features"]
 
         frames = [pd.read_parquet(f) for f in fichiers]
@@ -149,6 +150,7 @@ def _recompute(archive: Path) -> dict | None:
         resultat: dict[str, float] = {}
         for horizon in metadata["horizons"]:
             df = add_target(base.drop(columns=[TARGET]), horizon=horizon)
+            df = target_features(df, metadata.get("feature_profile", LEGACY_PROFILE))
             df = df.dropna(subset=[*features, TARGET, "seasonal_naive"])
             split = metadata.get("split", {})
             _train, _valid, test = time_split(

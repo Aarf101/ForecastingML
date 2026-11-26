@@ -214,6 +214,8 @@ def test_pipeline_definition_graph(monkeypatch):
     assert [s["Name"] for s in definition["Steps"]] == [
         "PreprocessFeatures", "TrainLightGBM", "EvaluateModel", "GateWAPE",
     ]
+    training = next(s for s in definition["Steps"] if s["Type"] == "Training")
+    assert json.loads(training["Arguments"]["HyperParameters"]["model-profile"]) == "median_calendar_v1"
     for step in definition["Steps"]:
         if step["Type"] == "Processing":
             paths = [i["S3Input"]["LocalPath"] for i in step["Arguments"]["ProcessingInputs"]]

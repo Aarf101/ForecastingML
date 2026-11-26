@@ -152,7 +152,7 @@ node(3, 3, "sagemaker", "Registry", "modèle", SM)
 node(4, 1, "cloudwatch", "Model Monitor", "", SM, dashed=True)
 node(4, 2, "sagemaker", "Endpoint", "serverless", VIOLET)
 node(4, 3, "sagemaker", "Batch", "16 jours", VIOLET)
-node(4, 4, "s3", "S3 forecast", "P10 · moyenne · P90", VIOLET)
+node(4, 4, "s3", "S3 forecast", "P10 · médiane · P90", VIOLET)
 
 # --- colonne 6 : rapport + dashboard -----------------------------------------
 node(5, 2, "bedrock", "Rapport LLM", "LangChain · Ollama", VIOLET)

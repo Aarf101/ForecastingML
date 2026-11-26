@@ -68,6 +68,7 @@ SEARCH_SPACE = {
 # Hyperparamètres figés pendant la recherche : un seul horizon pour que chaque
 # essai reste court (~3 min), sinon 4 boosters par job quadruplent la facture.
 STATIC = {
+    "model-profile": "median_calendar_v1",
     "quantiles": "false",
     "horizons": "1",
     "early-stopping-rounds": "40",

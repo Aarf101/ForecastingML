@@ -9,6 +9,22 @@ modèle de prévision dans SageMaker, dashboard dynamique »).
 
 Diagramme détaillé et justifications : **[docs/architecture.md](docs/architecture.md)**.
 
+## Modèle actif : LightGBM médian v8
+
+Le pipeline principal utilise désormais **P50 LightGBM + calendrier cible enrichi**,
+avec deux modèles P10/P90 par horizon, soit 48 boosters. La validation AWS
+indépendante donne **40,46 % de WAPE**, contre **42,26 % pour v7** et **41,48 %
+pour Chronos-2** sur le test historique du même catalogue actif. RMSLE :
+**0,5134** ; couverture P10/P90 : **79,22 %** pour 80 % nominal.
+
+Le workflow complet a réussi, **19 200 prévisions** ont été publiées et leurs
+valeurs correspondent exactement à l'artefact évalué. v7 reste conservé dans
+le manifeste précédent. **169 tests passent** ; notebook arrêté, aucun endpoint,
+jobs terminés, horaires désactivés.
+Voir [l'intégration](docs/median_production.md) et
+[la preuve AWS](docs/evidence/median_aws_integration.json).
+Les livrables et preuves v7 ci-dessous décrivent l'état antérieur à cette migration.
+
 **Revue du 19 novembre 2026 :** voir [docs/review.md](docs/review.md) pour les
 écarts aux deux PDF, les corrections vérifiées et les limites restantes.
 Évaluation AWS indépendante du code corrigé : **WAPE moyen 0,422609** contre
@@ -21,7 +37,7 @@ ci-dessous précèdent la correction du split et de la baseline.
 Le workflow mensuel complet a réussi sans reprise, avec **v7**, **19 200 prévisions**
 et des quantiles **P10/P90** sur les 16 horizons. L’évaluation indépendante mesure
 une couverture empirique de **78,3 %**, pour 80 % nominal. Le HPO a terminé ses
-six essais sur J+1 ; son objectif est `valid_wape`. **164 tests locaux passent**, dont les contrôles des benchmarks Chronos et médian/calendrier.
+six essais sur J+1 ; son objectif est `valid_wape`. **169 tests locaux passent**, dont les contrôles des benchmarks et de l'intégration médiane/calendrier.
 
 - [Rapport final PDF](output/pdf/rapport_final.pdf) et [version texte](docs/rapport_final.md).
 - [Diapositives éditables](docs/slides.pptx) et [PDF](output/pdf/slides.pdf).
@@ -44,12 +60,16 @@ désactivés ; données et modèles conservés. Voir [la preuve de nettoyage](do
 | 2 | Features + métriques + baseline LightGBM locale | ✅ |
 | 3a | Ingestion Kafka → S3 (Redpanda + s3mock en local) | ✅ |
 | 3b | ETL : nettoyage/dédup → `curated/` Parquet | ✅ Glue exécuté dans AWS |
-| 4 | SageMaker : Processing / Training / évaluation / Registry / Batch | ✅ Mensuel complet sans reprise ; v7, P10/P90, HPO et endpoint validés |
+| 4 | SageMaker : Processing / Training / évaluation / Registry / Batch | ✅ v8 médian actif, P10/P90 et Batch validés ; HPO et endpoint testés avec l'ancienne v7 |
 | 5 | Rapport LLM LangChain / Ollama, sans agent autonome | ✅ Génération réelle validée et publiée dans S3 |
 | 6 | Dashboard Streamlit | ✅ Hébergé et testé sur le notebook AWS, données S3 actives |
 | 7 | Rapport, vidéo 2 min, soutenance | ✅ PDF, slides, vidéo et script livrés ; répétition personnelle restante |
 
 ## Workflows AWS Learner Lab
+
+Les nouveaux entraînements utilisent **LightGBM médian + calendrier cible**
+(`median_calendar_v1`), avec P10/P90 et compatibilité des anciens artefacts L2.
+Voir [l'intégration et sa preuve AWS](docs/median_production.md).
 
 Le parcours corrigé est décrit dans [docs/learner_lab_workflows.md](docs/learner_lab_workflows.md).
 `make aws-workflows-up` déploie les workflows mensuel et quotidien, horaires
@@ -69,13 +89,14 @@ distinguent cet essai exploratoire du modèle actif. Commande : `make benchmark-
 après installation des dépendances optionnelles et récupération des poids.
 Sur les 120 séries appariées : WAPE **41,30 %** pour Chronos-2 contre **42,34 %**
 pour LightGBM, soit **2,45 %** de réduction relative d’erreur. Ce résultat est
-exploratoire ; v7 reste le modèle déployé.
+exploratoire ; Chronos n'a pas été activé à la suite de cet essai.
 
 Le [benchmark complet et la validation AWS](docs/chronos_full_validation.md)
 couvrent désormais les **1 200 séries** : WAPE **41,48 %** pour Chronos contre
 **42,26 %** pour LightGBM (**1,85 %** de réduction relative). Six jobs AWS ont
 terminé et un vrai Batch Transform de **19 200 lignes** a passé les contrôles.
-Le candidat reste distinct de v7, toujours actif ; les ressources de test sont arrêtées.
+Chronos n'a pas été activé ; le modèle courant est désormais le LightGBM médian v8.
+Les ressources de test Chronos sont arrêtées.
 
 ## Rapport LLM optionnel
 

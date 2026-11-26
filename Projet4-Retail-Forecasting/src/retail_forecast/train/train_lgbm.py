@@ -24,6 +24,7 @@ import pandas as pd
 
 from retail_forecast.evaluate.metrics import bias, rmse, wape
 from retail_forecast.features.build import active_catalog, build_features, time_split, xy
+from retail_forecast.train.profiles import DEFAULT_PROFILE, PROFILES, profile_params, target_features
 
 DEFAULT_PARAMS = {
     "objective": "regression",
@@ -86,16 +87,18 @@ def train_local(
     horizon: int = 1,
     params: dict | None = None,
     early_stopping_rounds: int = 50,
+    profile: str = DEFAULT_PROFILE,
 ) -> dict:
     """Entraîne le modèle global et compare à la baseline saisonnière."""
     feats = build_features(active_catalog(sales), horizon=horizon)
+    feats = target_features(feats, profile)
     train, valid, test = time_split(feats)
 
     X_tr, y_tr = xy(train)
     X_va, y_va = xy(valid)
     X_te, y_te = xy(test)
 
-    p = {**DEFAULT_PARAMS, **(params or {})}
+    p = {**DEFAULT_PARAMS, "n_estimators": 400, **(params or {}), **profile_params(profile)}
     model = _fit(lgb.LGBMRegressor(**p), X_tr, y_tr, X_va, y_va, early_stopping_rounds)
 
     pred = np.clip(model.predict(X_te), 0, None)
@@ -103,6 +106,7 @@ def train_local(
 
     model_wape, base_wape = wape(y_te, pred), wape(y_te, base)
     return {
+        "feature_profile": profile,
         "evaluation_protocol": "rolling_origin_purged_v2",
         "horizon": horizon,
         "n_train": int(len(train)),
@@ -130,14 +134,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Entraînement LightGBM local.")
     parser.add_argument("--data", default="data/raw/sales.parquet")
     parser.add_argument("--horizon", type=int, default=1)
+    parser.add_argument("--model-profile", choices=PROFILES, default=DEFAULT_PROFILE)
     parser.add_argument("--sample", type=float, default=1.0, help="fraction de séries")
-    parser.add_argument("--estimators", type=int, default=DEFAULT_PARAMS["n_estimators"])
+    parser.add_argument("--estimators", type=int, default=400)
     parser.add_argument("--out", default="reports/local_baseline.json")
     args = parser.parse_args(argv)
 
     sales = sample_series(load_sales(args.data), args.sample)
     res = train_local(
-        sales, horizon=args.horizon, params={"n_estimators": args.estimators}
+        sales, horizon=args.horizon, params={"n_estimators": args.estimators}, profile=args.model_profile
     )
     n_series = len(sales[["store_id", "item_id"]].drop_duplicates())
 
