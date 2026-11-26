@@ -1,0 +1,23 @@
+{
+  "job": "retail-chronos-transform-20261126-m5x-full",
+  "model_name": "retail-chronos-transform-20261126-m5x-full-model",
+  "model_artifact": "s3://retail-forecast-654654161593-ayoub/benchmarks/chronos/full/20261126-m5x-full/s0/artifacts/retail-chronos-full-20261126-m5x-full-s0/output/model.tar.gz",
+  "image": "763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-inference:2.6.0-cpu-py312",
+  "input_uri": "s3://retail-forecast-654654161593-ayoub/benchmarks/chronos/full/20261126-m5x-full/s0/serving/input.jsonl",
+  "output_uri": "s3://retail-forecast-654654161593-ayoub/benchmarks/chronos/full/20261126-m5x-full/s0/batch-output/",
+  "status": "Completed",
+  "active_published": false,
+  "failure_reason": "",
+  "rows": 19200,
+  "series": 1200,
+  "horizons": 16,
+  "verified": true,
+  "max_absolute_difference": {
+    "forecast_units": 1.33514404296875e-05,
+    "p10": 7.62939453125e-06,
+    "p90": 3.0517578125e-05
+  },
+  "forecast_uri": "s3://retail-forecast-654654161593-ayoub/benchmarks/chronos/full/20261126-m5x-full/s0/batch-output/candidate_forecast.parquet",
+  "active_manifest_unchanged": true,
+  "model_resource_deleted": true
+}

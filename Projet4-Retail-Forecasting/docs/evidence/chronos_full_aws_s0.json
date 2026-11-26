@@ -1,0 +1,58 @@
+{
+  "run_id": "20261126-m5x-full",
+  "job": "retail-chronos-full-20261126-m5x-full-s0",
+  "job_arn": "arn:aws:sagemaker:us-east-1:654654161593:training-job/retail-chronos-full-20261126-m5x-full-s0",
+  "prefix": "benchmarks/chronos/full/20261126-m5x-full/s0",
+  "status": "Completed",
+  "active_before_sha256": "d4548b261a51f47cf3534f2ccbd870fa128b5b75f1af633e9eb98fbd6eae576f",
+  "active_before": {
+    "metrics": {
+      "test_wape": 0.42260937238186896,
+      "baseline_wape": 0.5591388615206528,
+      "test_bias": 0.004767751426427376,
+      "test_rmsle": 0.5383865054007475,
+      "test_coverage_80": 0.7828831845238096,
+      "test_pinball_p10": 0.5121941263765107,
+      "test_pinball_p90": 0.733518733293518,
+      "test_interval_width": 8.724689642441025
+    },
+    "model_package_arn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/7",
+    "forecast_key": "forecast/runs/1a9b3e3496914fe8bb4d6ec91c57da67/forecast.parquet",
+    "run_id": "1a9b3e3496914fe8bb4d6ec91c57da67",
+    "model_data_url": "s3://retail-forecast-654654161593-ayoub/models/pipelines-9ber5kxlm3mu-TrainLightGBM-Smc2Y3gt95/output/model.tar.gz",
+    "target": "observed_sales",
+    "active_series": 1200,
+    "historical_series": 1255,
+    "previous": {
+      "metrics": {
+        "test_wape": 0.42260937238186896,
+        "baseline_wape": 0.5591388615206528,
+        "test_bias": 0.004767751426427376
+      },
+      "model_package_arn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/7",
+      "forecast_key": "forecast/runs/3427557cd4524e20840c02f2bc372ec6/forecast.parquet",
+      "run_id": "3427557cd4524e20840c02f2bc372ec6",
+      "model_data_url": "s3://retail-forecast-654654161593-ayoub/models/pipelines-9ber5kxlm3mu-TrainLightGBM-Smc2Y3gt95/output/model.tar.gz",
+      "target": "observed_sales",
+      "active_series": 1200,
+      "historical_series": 1255
+    }
+  },
+  "code_sha256": "2886ad3f258b4d046e2ab902340d5c69bd135cef23aba8eb684b8b00ee5ef82a",
+  "dataset_sha256": "3edf83c0e24a98b41ebb9b6fc0c2734caff15b06920355d4074af32fdc64f055",
+  "image": "763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-training:2.6.0-cpu-py312",
+  "instance_type": "ml.m5.xlarge",
+  "origin_shard": 0,
+  "origin_shards": 6,
+  "max_runtime_seconds": 3600,
+  "purpose": "Frozen zero-shot evaluation, not fine-tuning",
+  "source_uri": "s3://retail-forecast-654654161593-ayoub/code/chronos/2886ad3f258b4d046e2ab902340d5c69bd135cef23aba8eb684b8b00ee5ef82a/source.tar.gz",
+  "failure_reason": "",
+  "TrainingTimeInSeconds": 1345,
+  "BillableTimeInSeconds": 1345,
+  "TrainingStartTime": "2026-11-26 20:16:36.241000+01:00",
+  "TrainingEndTime": "2026-11-26 20:39:01.997000+01:00",
+  "model_artifact": "s3://retail-forecast-654654161593-ayoub/benchmarks/chronos/full/20261126-m5x-full/s0/artifacts/retail-chronos-full-20261126-m5x-full-s0/output/model.tar.gz",
+  "output_archive_uri": "s3://retail-forecast-654654161593-ayoub/benchmarks/chronos/full/20261126-m5x-full/s0/artifacts/retail-chronos-full-20261126-m5x-full-s0/output/output.tar.gz",
+  "batch_input_uri": "s3://retail-forecast-654654161593-ayoub/benchmarks/chronos/full/20261126-m5x-full/s0/serving/input.jsonl"
+}

@@ -8,6 +8,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--report', type=Path, default=Path('reports/chronos2_benchmark.json'))
     parser.add_argument('--weights', type=Path, required=True)
+    parser.add_argument('--doc', type=Path, default=Path('docs/chronos_benchmark.md'))
+    parser.add_argument('--figure', type=Path, default=Path('reports/chronos2_by_horizon.png'))
     args = parser.parse_args(argv)
     import json,hashlib
     import pandas as pd
@@ -41,8 +43,10 @@ def main(argv=None):
     r['bootstrap_method']='2000 paired resamples of whole series; preserves horizons and dates, does not capture all cross-series dependence.'
     r['relative_wape_change_vs_lightgbm']=(m['chronos']['mean_wape']/m['lightgbm']['mean_wape']-1)
     from importlib.metadata import version
-    r['versions']={name:version(name) for name in ['chronos-forecasting','torch','transformers','lightgbm','pandas']}
-    r['scope']=f"Exploratory paired comparison on {c['series']}/1200 series; not a real-sales benchmark."
+    local_versions={name:version(name) for name in ['chronos-forecasting','torch','transformers','lightgbm','pandas']}
+    r['report_builder_versions']=local_versions
+    r['versions']=r.get('metadata',{}).get('versions',local_versions)
+    r['scope']=f"Matched comparison on {c['series']}/1200 synthetic series; not a real-sales benchmark."
     p.write_text(json.dumps(r,indent=2)+'\n')
     fig,axes=plt.subplots(2,1,figsize=(9,7),sharex=True,layout='constrained')
     for name,label,color in [('lightgbm','LightGBM v7 (moyenne)','#2166ac'),('chronos','Chronos-2 (médiane)','#d6604d'),('seasonal_naive','Baseline saisonnière','#777777')]:
@@ -51,16 +55,16 @@ def main(argv=None):
     axes[0].set(ylabel='WAPE (%) — plus bas = mieux',title=f"{c['series']} séries appariées · 28 origines par horizon · données synthétiques")
     axes[1].axhline(80,color='#777777',linestyle='--',label='80 % nominal');axes[1].set(xlabel='Horizon (jours)',ylabel='Couverture P10–P90 (%)',xticks=range(1,17))
     for ax in axes:ax.grid(alpha=.2);ax.legend(frameon=False)
-    fig.savefig('reports/chronos2_by_horizon.png',dpi=160);plt.close(fig)
+    fig.savefig(args.figure,dpi=160);plt.close(fig)
     text='''\n## Résultat exécuté\n\n| Mesure | LightGBM v7 | Chronos-2 |\n|---|---:|---:|\n'''
     for label,key,fmt in [('WAPE moyen','mean_wape','.2%'),('RMSLE moyen','mean_rmsle','.4f'),('Couverture P10/P90','mean_coverage_80','.2%')]:
      text+=f"| {label} | {m['lightgbm'][key]:{fmt}} | {m['chronos'][key]:{fmt}} |\n"
     text+=f"\nBaseline saisonnière sur ces mêmes observations : **{m['seasonal_naive']['mean_wape']:.2%}** de WAPE.\n"
-    delta=r['relative_wape_change_vs_lightgbm'];text+=f"Écart relatif de WAPE de Chronos-2 face à LightGBM : **{delta:+.2%}** (un signe négatif signifie moins d’erreur). Le modèle actif n’a pas été remplacé. Une validation sur les 1 200 séries et une intégration AWS restent nécessaires avant son remplacement.\n"
-    text+=f"\nLes {c['series']} séries couvrent {r['sample']['stores']} magasins et {r['sample']['items']} articles distincts.\nTemps cumulé d’inférence Chronos sur les 43 origines : {r['total_inference_seconds']/60:.1f} minutes,\nsur {c['device']}, avec {c['threads']} threads. Ce temps ne correspond pas à une seule prévision de 16 jours.\n"
+    delta=r['relative_wape_change_vs_lightgbm'];text+=f"Écart relatif de WAPE de Chronos-2 face à LightGBM : **{delta:+.2%}** (un signe négatif signifie moins d’erreur). Le modèle actif n’a pas été remplacé. Le résultat reste propre au jeu synthétique ; la publication active est un parcours distinct.\n"
+    text+=f"\nLes {c['series']} séries couvrent {r['sample']['stores']} magasins et {r['sample']['items']} articles distincts.\nTemps cumulé d’inférence Chronos sur les 43 origines : {r['total_inference_seconds']/60:.1f} minutes,\nsur {c['device']}, avec {c['threads']} threads par processus. Il s’agit du temps cumulé, pas du délai d’une seule prévision de 16 jours.\n"
     text+=f"\nÉcart de WAPE, intervalle bootstrap descriptif à 95 % : {r['bootstrap_wape_gap_pp_95'][0]:+.2f} à {r['bootstrap_wape_gap_pp_95'][1]:+.2f} points. Rééchantillonnage de séries entières ; les corrélations entre séries ne sont pas toutes représentées.\n"
-    text+='\n![Comparaison par horizon](../reports/chronos2_by_horizon.png)\n\nPreuve détaillée : [JSON du benchmark](../reports/chronos2_benchmark.json).\n'
-    doc=Path('docs/chronos_benchmark.md');original=doc.read_text().split('\n## Résultat exécuté')[0];doc.write_text(original.rstrip()+'\n'+text)
+    text+=f'\n![Comparaison par horizon](../reports/{args.figure.name})\n\nPreuve détaillée : [JSON du benchmark](../reports/{args.report.name}).\n'
+    doc=args.doc;original=doc.read_text().split('\n## Résultat exécuté')[0];doc.write_text(original.rstrip()+'\n'+text)
     print(text)
 
 

@@ -21,7 +21,7 @@ ci-dessous précèdent la correction du split et de la baseline.
 Le workflow mensuel complet a réussi sans reprise, avec **v7**, **19 200 prévisions**
 et des quantiles **P10/P90** sur les 16 horizons. L’évaluation indépendante mesure
 une couverture empirique de **78,3 %**, pour 80 % nominal. Le HPO a terminé ses
-six essais sur J+1 ; son objectif est `valid_wape`. **153 tests locaux passent**, dont les contrôles du benchmark Chronos.
+six essais sur J+1 ; son objectif est `valid_wape`. **161 tests locaux passent**, dont les contrôles du benchmark Chronos.
 
 - [Rapport final PDF](output/pdf/rapport_final.pdf) et [version texte](docs/rapport_final.md).
 - [Diapositives éditables](docs/slides.pptx) et [PDF](output/pdf/slides.pdf).
@@ -70,6 +70,12 @@ après installation des dépendances optionnelles et récupération des poids.
 Sur les 120 séries appariées : WAPE **41,30 %** pour Chronos-2 contre **42,34 %**
 pour LightGBM, soit **2,45 %** de réduction relative d’erreur. Ce résultat est
 exploratoire ; v7 reste le modèle déployé.
+
+Le [benchmark complet et la validation AWS](docs/chronos_full_validation.md)
+couvrent désormais les **1 200 séries** : WAPE **41,48 %** pour Chronos contre
+**42,26 %** pour LightGBM (**1,85 %** de réduction relative). Six jobs AWS ont
+terminé et un vrai Batch Transform de **19 200 lignes** a passé les contrôles.
+Le candidat reste distinct de v7, toujours actif ; les ressources de test sont arrêtées.
 
 ## Rapport LLM optionnel
 

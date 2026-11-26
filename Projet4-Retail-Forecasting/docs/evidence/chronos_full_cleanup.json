@@ -1,0 +1,37 @@
+{
+  "checked_at": "2026-11-26T19:49:40.249630+00:00",
+  "benchmark_jobs": [
+    {
+      "job": "retail-chronos-full-20261126-m5x-full-s0",
+      "status": "Completed"
+    },
+    {
+      "job": "retail-chronos-full-20261126-m5x-full-s1",
+      "status": "Completed"
+    },
+    {
+      "job": "retail-chronos-full-20261126-m5x-full-s2",
+      "status": "Completed"
+    },
+    {
+      "job": "retail-chronos-full-20261126-m5x-full-s3",
+      "status": "Completed"
+    },
+    {
+      "job": "retail-chronos-full-20261126-m5x-full-s4",
+      "status": "Completed"
+    },
+    {
+      "job": "retail-chronos-full-20261126-m5x-full-s5",
+      "status": "Completed"
+    }
+  ],
+  "active_project_jobs": [],
+  "transform_status": "Completed",
+  "temporary_model": "Deleted",
+  "notebook": "Stopped",
+  "schedules": {
+    "retail-training": "DISABLED",
+    "retail-inference": "DISABLED"
+  }
+}

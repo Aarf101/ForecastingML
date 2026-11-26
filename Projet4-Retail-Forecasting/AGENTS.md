@@ -8,7 +8,8 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision des ventes observées J
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (153 tests, aucun service externe requis) |
+| `make test` | pytest (161 tests, aucun service externe requis) |
+| `make aws-chronos-validate` | surveillance des six partitions, Batch Transform réel et nettoyage du candidat |
 | `make benchmark-chronos` | comparaison exploratoire Chronos-2 / v7, 120 séries, aucun calcul AWS |
 | `make train` | évaluation locale LightGBM → `reports/local_baseline.json` |
 | `make train-quick` | même chose sur 20 % des séries, 200 arbres (itération) |
@@ -58,6 +59,10 @@ infra/aws/
   workflows.py         Step Functions training/inference + horaires EventBridge désactivés
   dashboard_host.py    hébergement Streamlit sur le notebook existant
 infra/sagemaker/
+  chronos_benchmark.py lance les jobs de benchmark CPU, sans promotion
+  chronos_entry.py     backtest complet et artefact Chronos figé
+  chronos_inference.py handler de serving, historiques quotidiens complets
+  chronos_validate.py  métriques indépendantes et validation du vrai Batch Transform
   lifecycle.py         candidat évalué -> Batch Transform -> manifeste conditionnel
   recovery.py          reprise du registre avec preuve cloud indépendante
   serving.py           layout code/ sans modification des fichiers évalués
@@ -127,6 +132,19 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
   Gain relatif **2,45 %** ; couverture 79,65 % contre 79,01 %.
 - Exécuté localement sur CPU, sans fine-tuning et sans nouveau job AWS.
   Le modèle actif reste **v7**. Ne pas extrapoler ce résultat aux 1 200 séries.
+
+## Chronos-2 — catalogue complet et AWS validés
+
+- `docs/chronos_full_validation.md`, `reports/chronos2_full_benchmark.json` :
+  **1 200 séries**, 16 horizons × 28 origines, **537 600 couples appariés**.
+- WAPE : Chronos **0,414794**, référence v7 **0,422610**, gain relatif **1,85 %**.
+  RMSLE 0,520840 contre 0,538387 ; couverture 79,53 % contre 78,29 %.
+- Six jobs `ml.m5.xlarge` terminés ; les GPU et plus grosses instances ont été
+  refusés par IAM. Aucune politique IAM modifiée, aucun fine-tuning.
+- Batch Transform CPU **19 200 lignes** vérifié contre le handler évalué ; modèle
+  temporaire supprimé, aucun calcul actif, horaires désactivés, notebook arrêté.
+- **v7 reste actif** : les workflows mensuel/quotidien restent spécifiques LightGBM.
+  Ne pas prétendre que Chronos est activé ou qu’un endpoint Chronos a été testé.
 
 ## Décisions déjà arbitrées (ne pas les reproposer)
 

@@ -341,3 +341,7 @@ report-final:
 .PHONY: benchmark-chronos
 benchmark-chronos:
 	$(PY) -m retail_forecast.evaluate.benchmark_chronos --series-limit 120 --batch-size 128
+
+.PHONY: aws-chronos-validate
+aws-chronos-validate:
+	$(PY) -m infra.sagemaker.chronos_validate run

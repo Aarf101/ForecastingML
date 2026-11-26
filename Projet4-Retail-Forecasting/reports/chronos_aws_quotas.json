@@ -1,0 +1,102 @@
+[
+  {
+    "name": "ml.m5.2xlarge for spot training job usage",
+    "value": 10.0,
+    "code": "L-4A823FAB"
+  },
+  {
+    "name": "ml.c5.4xlarge for training warm pool usage",
+    "value": 0.0,
+    "code": "L-7BDD9EA3"
+  },
+  {
+    "name": "ml.c5.4xlarge for processing job usage",
+    "value": 1.0,
+    "code": "L-EFB2F063"
+  },
+  {
+    "name": "ml.g5.xlarge for processing job usage",
+    "value": 0.0,
+    "code": "L-BE792A7A"
+  },
+  {
+    "name": "ml.g4dn.xlarge for spot training job usage",
+    "value": 1.0,
+    "code": "L-944F78BB"
+  },
+  {
+    "name": "ml.g5.xlarge for spot training job usage",
+    "value": 1.0,
+    "code": "L-DE07CBDF"
+  },
+  {
+    "name": "ml.m5.4xlarge for spot training job usage",
+    "value": 5.0,
+    "code": "L-2A6ACFF7"
+  },
+  {
+    "name": "ml.g4dn.xlarge for training job usage",
+    "value": 1.0,
+    "code": "L-3F53BF0F"
+  },
+  {
+    "name": "ml.m5.4xlarge for training warm pool usage",
+    "value": 0.0,
+    "code": "L-03767DF9"
+  },
+  {
+    "name": "ml.m5.4xlarge for training job usage",
+    "value": 10.0,
+    "code": "L-AFB011B4"
+  },
+  {
+    "name": "ml.g4dn.xlarge for processing job usage",
+    "value": 0.0,
+    "code": "L-2F1EB012"
+  },
+  {
+    "name": "ml.c5.4xlarge for spot training job usage",
+    "value": 2.0,
+    "code": "L-36C5FA8E"
+  },
+  {
+    "name": "ml.m5.4xlarge for processing job usage",
+    "value": 2.0,
+    "code": "L-379E85A3"
+  },
+  {
+    "name": "ml.m5.2xlarge for training job usage",
+    "value": 20.0,
+    "code": "L-AD0A282D"
+  },
+  {
+    "name": "ml.c5.4xlarge for training job usage",
+    "value": 4.0,
+    "code": "L-E7898792"
+  },
+  {
+    "name": "ml.g5.xlarge for training job usage",
+    "value": 1.0,
+    "code": "L-B6D80D9C"
+  },
+  {
+    "name": "ml.m5.2xlarge for training warm pool usage",
+    "value": 0.0,
+    "code": "L-1686EE8B"
+  },
+  {
+    "name": "ml.g4dn.xlarge for training warm pool usage",
+    "value": 1.0,
+    "code": "L-955074FD"
+  },
+  {
+    "name": "ml.g5.xlarge for training warm pool usage",
+    "value": 1.0,
+    "code": "L-8E6F4665"
+  },
+  {
+    "name": "ml.m5.2xlarge for processing job usage",
+    "value": 4.0,
+    "code": "L-1D84B9D2"
+  }
+]

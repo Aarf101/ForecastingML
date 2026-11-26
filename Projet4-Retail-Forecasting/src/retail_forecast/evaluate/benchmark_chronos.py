@@ -106,6 +106,7 @@ def score(panel, predictions):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data', type=Path, default=Path('data/raw/sales.parquet'))
+    parser.add_argument('--cache-dir', type=Path, default=Path('data/benchmark'))
     parser.add_argument('--artifact', type=Path, default=Path('data/benchmark/active-model.tar.gz'))
     parser.add_argument('--model-path', default='amazon/chronos-2')
     parser.add_argument('--context-length', type=int, default=256)
@@ -113,6 +114,8 @@ def main(argv=None):
     parser.add_argument('--threads', type=int, default=4)
     parser.add_argument('--device', choices=['cpu','cuda'], default='cpu')
     parser.add_argument('--series-limit', type=int, default=0)
+    parser.add_argument('--origin-shard', type=int, default=0)
+    parser.add_argument('--origin-shards', type=int, default=1)
     parser.add_argument('--origin-limit', type=int, default=0)
     parser.add_argument('--covariates', choices=['none','calendar','retail'], default='calendar')
     parser.add_argument('--output', type=Path, default=Path('reports/chronos2_benchmark.json'))
@@ -120,7 +123,7 @@ def main(argv=None):
     started = time.monotonic()
     sales = pd.read_parquet(args.data);sales['date'] = pd.to_datetime(sales.date)
     digest = hashlib.sha256(args.artifact.read_bytes()+args.data.read_bytes()).hexdigest()
-    cache = Path('data/benchmark');cache.mkdir(exist_ok=True)
+    cache = args.cache_dir;cache.mkdir(exist_ok=True,parents=True)
     panel_path = cache/f'panel-{digest[:12]}.parquet'
     if not panel_path.exists():
         print('Recomputing reference evaluation panel', flush=True)
@@ -131,6 +134,11 @@ def main(argv=None):
     sales = sales[sales.set_index(['store_id','item_id']).index.isin(selection)].copy()
     panel = panel[panel.set_index(['store_id','item_id']).index.isin(selection)].copy()
     origins = sorted(panel.date.unique())
+    if not 0 <= args.origin_shard < args.origin_shards:
+        raise ValueError('partition d’origines invalide')
+    if args.origin_shards > 1:
+        origins = list(np.array_split(np.asarray(origins), args.origin_shards)[args.origin_shard])
+        panel = panel[panel.date.isin(origins)].copy()
     if args.origin_limit and args.origin_limit < len(origins):
         origins = [origins[i] for i in np.linspace(0,len(origins)-1,args.origin_limit,dtype=int)]
         panel = panel[panel.date.isin(origins)].copy()
@@ -141,6 +149,8 @@ def main(argv=None):
               'series': len(pairs), 'origins': len(origins), 'rows_scored': len(panel),
               'dataset_and_artifact_sha256': digest, 'point_statistic': 'Chronos median vs LightGBM regression mean',
               'device': args.device, 'fine_tuned': False, 'protocol': 'matched_rolling_origin_purged_v2'}
+    if args.origin_shards > 1:
+        config.update(origin_shard=args.origin_shard, origin_shards=args.origin_shards, origin_dates=[str(pd.Timestamp(o).date()) for o in origins])
     directory = cache/('chronos-'+hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()[:12]);directory.mkdir(exist_ok=True)
     gc.collect()
     import torch
