@@ -131,10 +131,10 @@ _ensure_source_icon()
 
 # --- colonne 1 : source -----------------------------------------------------
 node(0, 0, "source", "Ventes", "POS · CSV", ORANGE)
-node(0, 1, "source", "Historique", "M5 · Rossmann", ORANGE)
+node(0, 1, "source", "Historique", "ventes synthétiques", ORANGE)
 
 # --- colonne 2 : ingestion --------------------------------------------------
-node(1, 0, "msk", "Kafka", "MSK", ORANGE)
+node(1, 0, "msk", "Kafka", "EC2 / Redpanda", ORANGE)
 node(1, 1, "firehose", "Firehose", "60 s", ORANGE)
 
 # --- colonne 3 : lac de données --------------------------------------------
@@ -151,11 +151,11 @@ node(3, 3, "sagemaker", "Registry", "modèle", SM)
 # --- colonne 5 : serving ----------------------------------------------------
 node(4, 1, "cloudwatch", "Model Monitor", "", SM, dashed=True)
 node(4, 2, "sagemaker", "Endpoint", "serverless", VIOLET)
-node(4, 3, "sagemaker", "Batch", "28 jours", VIOLET)
-node(4, 4, "s3", "S3 forecast", "P10 · P50 · P90", VIOLET)
+node(4, 3, "sagemaker", "Batch", "16 jours", VIOLET)
+node(4, 4, "s3", "S3 forecast", "P10 · moyenne · P90", VIOLET)
 
-# --- colonne 6 : agent + dashboard -----------------------------------------
-node(5, 2, "bedrock", "Agent LLM", "LangGraph · RAG", VIOLET)
+# --- colonne 6 : rapport + dashboard -----------------------------------------
+node(5, 2, "bedrock", "Rapport LLM", "LangChain · Ollama", VIOLET)
 node(5, 4, "dashboard", "Dashboard", "Streamlit", PINK)
 
 # --- flèches ----------------------------------------------------------------
@@ -173,9 +173,9 @@ arrow((XS[3] + BW / 2, YS[3] + 0.06), (XS[4] - BW / 2, YS[2] - 0.06))
 h(3, 4, 3)                       # registry -> batch
 v(4, 2, 1, style=":")            # endpoint -> model monitor
 v(4, 3, 4)                       # batch -> s3 forecast
-h(4, 5, 2, style="--")           # endpoint -> agent
+h(4, 5, 2, style="--")           # endpoint -> rapport
 arrow((XS[4] + BW / 2, YS[4]), (XS[5] - BW / 2, YS[4]))  # forecast -> dashboard
-arrow((XS[5], YS[2] + BH / 2), (XS[5], YS[4] - BH / 2))  # agent -> dashboard
+arrow((XS[5], YS[2] + BH / 2), (XS[5], YS[4] - BH / 2))  # rapport -> dashboard
 
 # --- bandeau MLOps ----------------------------------------------------------
 bar_y, bar_h = 0.52, 0.56

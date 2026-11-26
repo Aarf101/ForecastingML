@@ -34,11 +34,11 @@ ARROW = "#9B8AB8"
 
 STEPS = [
     ("Ventes", "POS · CSV", CARD, "#7EA6E0"),
-    ("Kafka", "MSK", CARD, "#F0A73C"),
+    ("Kafka", "EC2 / Redpanda", CARD, "#F0A73C"),
     ("S3 + ETL", "Glue", CARD, "#5FBF72"),
     ("SageMaker", "Training", CARD, "#6FA8F5"),
-    ("Prévisions", "P10 · P50 · P90", CARD, "#B98BE6"),
-    ("Agent LLM", "LangGraph", CARD, "#A78BFA"),
+    ("Prévisions", "Moyenne · P10 · P90", CARD, "#B98BE6"),
+    ("Rapport LLM", "LangChain / Ollama", CARD, "#A78BFA"),
     ("Dashboard", "Streamlit", CARD, "#F2719E"),
 ]
 

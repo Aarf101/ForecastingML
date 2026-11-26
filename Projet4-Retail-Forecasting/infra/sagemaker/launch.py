@@ -34,7 +34,7 @@ IMAGE = (
 PROGRAM = "train_entry.py"
 SOURCEDIR_KEY = "code/sourcedir.tar.gz"
 INSTANCE = "ml.m5.large"  # 2 vCPU / 8 Go — le moins cher qui suffit
-MAX_RUNTIME = 1200  # 20 min : garde-fou anti-dépense
+MAX_RUNTIME = 3600  # 60 min : garde-fou pour les 48 boosters
 
 
 def _sm_client():

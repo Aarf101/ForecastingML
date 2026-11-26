@@ -1,0 +1,481 @@
+{
+  "collected_at": "2026-11-26T16:26:39.261574+00:00",
+  "monthly": {
+    "arn": "arn:aws:states:us-east-1:654654161593:execution:retail-training:771772ac-c47c-4c1c-9442-fb1939c7abf6",
+    "status": "SUCCEEDED",
+    "start": "2026-11-26 13:46:44.015000+01:00",
+    "stop": "2026-11-26 14:31:19.662000+01:00"
+  },
+  "pipeline": {
+    "execution": "arn:aws:sagemaker:us-east-1:654654161593:pipeline/retail-forecast-mlops/execution/9ber5kxlm3mu",
+    "steps": [
+      {
+        "name": "RegisterApproved-RegisterModel",
+        "status": "Succeeded"
+      },
+      {
+        "name": "GateWAPE",
+        "status": "Succeeded"
+      },
+      {
+        "name": "EvaluateModel",
+        "status": "Succeeded"
+      },
+      {
+        "name": "TrainLightGBM",
+        "status": "Succeeded"
+      },
+      {
+        "name": "PreprocessFeatures",
+        "status": "Succeeded"
+      }
+    ]
+  },
+  "evaluation": {
+    "regression_metrics": {
+      "test_wape": {
+        "value": 0.422609,
+        "standard_deviation": "NaN"
+      },
+      "baseline_wape": {
+        "value": 0.559139,
+        "standard_deviation": "NaN"
+      },
+      "improvement_vs_baseline": {
+        "value": 0.244178,
+        "standard_deviation": "NaN"
+      }
+    },
+    "by_horizon": {
+      "1": {
+        "wape": 0.424981,
+        "wape_artefact": 0.424981
+      },
+      "2": {
+        "wape": 0.424563,
+        "wape_artefact": 0.424563
+      },
+      "3": {
+        "wape": 0.426322,
+        "wape_artefact": 0.426322
+      },
+      "4": {
+        "wape": 0.42448,
+        "wape_artefact": 0.42448
+      },
+      "5": {
+        "wape": 0.423541,
+        "wape_artefact": 0.423541
+      },
+      "6": {
+        "wape": 0.424569,
+        "wape_artefact": 0.424569
+      },
+      "7": {
+        "wape": 0.422316,
+        "wape_artefact": 0.422316
+      },
+      "8": {
+        "wape": 0.425985,
+        "wape_artefact": 0.425985
+      },
+      "9": {
+        "wape": 0.422469,
+        "wape_artefact": 0.422469
+      },
+      "10": {
+        "wape": 0.420795,
+        "wape_artefact": 0.420795
+      },
+      "11": {
+        "wape": 0.420348,
+        "wape_artefact": 0.420348
+      },
+      "12": {
+        "wape": 0.417281,
+        "wape_artefact": 0.417281
+      },
+      "13": {
+        "wape": 0.419159,
+        "wape_artefact": 0.419159
+      },
+      "14": {
+        "wape": 0.420131,
+        "wape_artefact": 0.420131
+      },
+      "15": {
+        "wape": 0.423876,
+        "wape_artefact": 0.423876
+      },
+      "16": {
+        "wape": 0.420933,
+        "wape_artefact": 0.420933
+      }
+    },
+    "n_horizons": 16,
+    "best_horizon": "12",
+    "worst_horizon": "3",
+    "independent": true,
+    "independent_details": {
+      "1": {
+        "rmsle": 0.5398056431766772,
+        "pinball_p10": 0.5138942347170017,
+        "pinball_p90": 0.7399242411806025,
+        "coverage_80": 0.7805059523809523,
+        "interval_width": 8.725058728316931
+      },
+      "2": {
+        "rmsle": 0.5401866129628189,
+        "pinball_p10": 0.51386919754766,
+        "pinball_p90": 0.7328632348807032,
+        "coverage_80": 0.7858630952380953,
+        "interval_width": 8.776175967889838
+      },
+      "3": {
+        "rmsle": 0.5406132511928319,
+        "pinball_p10": 0.513725688729793,
+        "pinball_p90": 0.7370913180964787,
+        "coverage_80": 0.7828869047619048,
+        "interval_width": 8.71544135288662
+      },
+      "4": {
+        "rmsle": 0.5399306561918488,
+        "pinball_p10": 0.5142831368601344,
+        "pinball_p90": 0.7380673434951447,
+        "coverage_80": 0.7788095238095238,
+        "interval_width": 8.67899100135798
+      },
+      "5": {
+        "rmsle": 0.5388488368645508,
+        "pinball_p10": 0.5123940028631814,
+        "pinball_p90": 0.7377322680469323,
+        "coverage_80": 0.7789880952380952,
+        "interval_width": 8.694892782812811
+      },
+      "6": {
+        "rmsle": 0.540454550389833,
+        "pinball_p10": 0.5134383895663316,
+        "pinball_p90": 0.7381178473088206,
+        "coverage_80": 0.7796428571428572,
+        "interval_width": 8.694047286068308
+      },
+      "7": {
+        "rmsle": 0.5383154926511762,
+        "pinball_p10": 0.510652448122343,
+        "pinball_p90": 0.7291916250425944,
+        "coverage_80": 0.7881845238095239,
+        "interval_width": 8.790596089494835
+      },
+      "8": {
+        "rmsle": 0.5413298355630827,
+        "pinball_p10": 0.5113065596390574,
+        "pinball_p90": 0.7390598249654295,
+        "coverage_80": 0.7846428571428572,
+        "interval_width": 8.758931538712883
+      },
+      "9": {
+        "rmsle": 0.5376291087759849,
+        "pinball_p10": 0.5135328798078628,
+        "pinball_p90": 0.7331827617897393,
+        "coverage_80": 0.7811011904761904,
+        "interval_width": 8.676685640708975
+      },
+      "10": {
+        "rmsle": 0.5368931738267609,
+        "pinball_p10": 0.5116539962295729,
+        "pinball_p90": 0.7290823476061127,
+        "coverage_80": 0.7829464285714286,
+        "interval_width": 8.710827919135747
+      },
+      "11": {
+        "rmsle": 0.536034331609549,
+        "pinball_p10": 0.511513853755408,
+        "pinball_p90": 0.7291782298493606,
+        "coverage_80": 0.7839880952380952,
+        "interval_width": 8.717255352900898
+      },
+      "12": {
+        "rmsle": 0.5349207955679671,
+        "pinball_p10": 0.5115560372565662,
+        "pinball_p90": 0.7275082291210412,
+        "coverage_80": 0.7834523809523809,
+        "interval_width": 8.679114111668468
+      },
+      "13": {
+        "rmsle": 0.5357079362662589,
+        "pinball_p10": 0.5110881517825624,
+        "pinball_p90": 0.7284737395471148,
+        "coverage_80": 0.784702380952381,
+        "interval_width": 8.757637967469476
+      },
+      "14": {
+        "rmsle": 0.5361110056746718,
+        "pinball_p10": 0.5100870328724824,
+        "pinball_p90": 0.7277847443987677,
+        "coverage_80": 0.7858630952380953,
+        "interval_width": 8.775911515392428
+      },
+      "15": {
+        "rmsle": 0.5393219686464792,
+        "pinball_p10": 0.512057995202848,
+        "pinball_p90": 0.7384754594681443,
+        "coverage_80": 0.7807142857142857,
+        "interval_width": 8.712949095622163
+      },
+      "16": {
+        "rmsle": 0.5380808870514682,
+        "pinball_p10": 0.5100524170713667,
+        "pinball_p90": 0.7305665178993016,
+        "coverage_80": 0.7838392857142857,
+        "interval_width": 8.730517928618022
+      }
+    },
+    "source": "recompute"
+  },
+  "hpo": {
+    "name": "retail-lgbm-hpo-20261126-125039",
+    "status": "Completed",
+    "counters": {
+      "Completed": 6,
+      "InProgress": 0,
+      "RetryableError": 0,
+      "NonRetryableError": 0,
+      "Stopped": 0
+    },
+    "objective": {
+      "Type": "Minimize",
+      "MetricName": "valid_wape"
+    },
+    "best_validation_wape": 0.41668200492858887,
+    "best_parameters": {
+      "learning-rate": "0.13301296360901763",
+      "n-estimators": "388",
+      "num-leaves": "65"
+    },
+    "best_job": "retail-lgbm-hpo-20261126-125039-003-5fa7b3fd"
+  },
+  "active": {
+    "metrics": {
+      "test_wape": 0.42260937238186896,
+      "baseline_wape": 0.5591388615206528,
+      "test_bias": 0.004767751426427376,
+      "test_rmsle": 0.5383865054007475,
+      "test_coverage_80": 0.7828831845238096,
+      "test_pinball_p10": 0.5121941263765107,
+      "test_pinball_p90": 0.733518733293518,
+      "test_interval_width": 8.724689642441025
+    },
+    "model_package_arn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/7",
+    "forecast_key": "forecast/runs/1a9b3e3496914fe8bb4d6ec91c57da67/forecast.parquet",
+    "run_id": "1a9b3e3496914fe8bb4d6ec91c57da67",
+    "model_data_url": "s3://retail-forecast-654654161593-ayoub/models/pipelines-9ber5kxlm3mu-TrainLightGBM-Smc2Y3gt95/output/model.tar.gz",
+    "target": "observed_sales",
+    "active_series": 1200,
+    "historical_series": 1255,
+    "previous": {
+      "metrics": {
+        "test_wape": 0.42260937238186896,
+        "baseline_wape": 0.5591388615206528,
+        "test_bias": 0.004767751426427376
+      },
+      "model_package_arn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/7",
+      "forecast_key": "forecast/runs/3427557cd4524e20840c02f2bc372ec6/forecast.parquet",
+      "run_id": "3427557cd4524e20840c02f2bc372ec6",
+      "model_data_url": "s3://retail-forecast-654654161593-ayoub/models/pipelines-9ber5kxlm3mu-TrainLightGBM-Smc2Y3gt95/output/model.tar.gz",
+      "target": "observed_sales",
+      "active_series": 1200,
+      "historical_series": 1255
+    }
+  },
+  "forecast": {
+    "rows": 19200,
+    "series": 1200,
+    "horizons": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "version": "v7",
+    "origin": "2024-12-30 00:00:00",
+    "target_start": "2024-12-31 00:00:00",
+    "target_end": "2025-01-15 00:00:00",
+    "quantiles_present": true,
+    "valid_bounds": true
+  },
+  "endpoint": {
+    "endpoint": "retail-demand-lgbm",
+    "status": "InService",
+    "model_package_arn": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/7",
+    "model_data_url": "s3://retail-forecast-654654161593-ayoub/models/pipelines-9ber5kxlm3mu-TrainLightGBM-Smc2Y3gt95/output/model.tar.gz",
+    "horizons": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "predictions": [
+      {
+        "forecast_units": 5.539473471318665,
+        "p10": 2.096137646474478,
+        "p90": 9.329011119393893
+      },
+      {
+        "forecast_units": 6.248421652355059,
+        "p10": 2.1400834816335963,
+        "p90": 11.61989539338935
+      },
+      {
+        "forecast_units": 5.8472060568598705,
+        "p10": 2.2015459484594064,
+        "p90": 10.419468109855252
+      },
+      {
+        "forecast_units": 6.544717531462988,
+        "p10": 2.618359174679605,
+        "p90": 11.05157400734316
+      },
+      {
+        "forecast_units": 7.853629209587576,
+        "p10": 3.3166091370505972,
+        "p90": 13.525049996940236
+      },
+      {
+        "forecast_units": 6.712702622381919,
+        "p10": 2.2634977605863806,
+        "p90": 11.89784817215996
+      },
+      {
+        "forecast_units": 5.83410441679971,
+        "p10": 2.055161520538727,
+        "p90": 9.953729562861465
+      },
+      {
+        "forecast_units": 5.43820570326303,
+        "p10": 1.9779406746733001,
+        "p90": 9.812022792653472
+      },
+      {
+        "forecast_units": 5.918794752098681,
+        "p10": 2.0512492720611015,
+        "p90": 10.243839544583853
+      },
+      {
+        "forecast_units": 6.453803685714,
+        "p10": 2.1905207677098626,
+        "p90": 10.01542137171968
+      },
+      {
+        "forecast_units": 6.8465019103862765,
+        "p10": 2.8570116155769743,
+        "p90": 11.788248279380811
+      },
+      {
+        "forecast_units": 9.307982063815391,
+        "p10": 3.281883784218089,
+        "p90": 14.822468958813149
+      },
+      {
+        "forecast_units": 6.823513283872413,
+        "p10": 2.8595817902244742,
+        "p90": 11.283911033188222
+      },
+      {
+        "forecast_units": 5.968410389334654,
+        "p10": 2.150658082098559,
+        "p90": 10.014251962828476
+      },
+      {
+        "forecast_units": 5.585594334197109,
+        "p10": 2.049364943173035,
+        "p90": 9.42580494984139
+      },
+      {
+        "forecast_units": 5.883685362276498,
+        "p10": 1.993837182366749,
+        "p90": 10.174844722788416
+      }
+    ],
+    "valid_quantiles": true
+  },
+  "daily": {
+    "arn": "arn:aws:states:us-east-1:654654161593:execution:retail-inference:14378c68-d745-48f1-9816-49eda262c1b0",
+    "status": "SUCCEEDED",
+    "start": "2026-11-26 17:14:41.052000+01:00",
+    "stop": "2026-11-26 17:26:34.749000+01:00",
+    "same_model_new_batch_previous_preserved": true
+  },
+  "tests": {
+    "tests": "150",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "time": "4.750"
+  },
+  "llm": {
+    "provider": "ollama",
+    "model": "qwen2.5:3b",
+    "framework": "LangChain LCEL",
+    "source_package": "arn:aws:sagemaker:us-east-1:654654161593:model-package/retail-forecast-lgbm/7",
+    "local_report": "reports/weekly_brief.md",
+    "s3_report": "reports/weekly_brief_2026-11-26.md",
+    "sha256": "b748763f37850456d8aa31ad5d3a276300e003814a062d061476b1ea10306228"
+  },
+  "dashboard": {
+    "host": "retail-forecast-nb",
+    "browser_charts_verified": true,
+    "video": "output/video/demo_projet4.mp4",
+    "duration_seconds": 120,
+    "sha256": "8a8bc5b9c902fe909cf36d6ec6e284078dab5ab1291428a5e757545a4b5f8fc3"
+  },
+  "cleanup": {
+    "notebook": "Stopped",
+    "endpoint": "Deleted",
+    "project_active_jobs": [],
+    "schedules": {
+      "retail-training": "DISABLED",
+      "retail-inference": "DISABLED"
+    }
+  },
+  "athena": {
+    "status": "SUCCEEDED",
+    "active_counts": [
+      [
+        "rows",
+        "versions",
+        "version",
+        "horizons"
+      ],
+      [
+        "19200",
+        "1",
+        "v7",
+        "16"
+      ]
+    ]
+  }
+}

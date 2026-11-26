@@ -8,7 +8,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision des ventes observées J
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (136 tests, aucun service externe requis) |
+| `make test` | pytest (150 tests, aucun service externe requis) |
 | `make train` | évaluation locale LightGBM → `reports/local_baseline.json` |
 | `make train-quick` | même chose sur 20 % des séries, 200 arbres (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |
@@ -19,7 +19,7 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision des ventes observées J
 | `make diagram` | régénère les 5 variantes de diagrammes (matplotlib uniquement) |
 | `make slides` | régénère `docs/slides.pptx` depuis `docs/build_slides.py` |
 | `make sagemaker-register` | Model Registry (gate `WAPE_THRESHOLD`) |
-| `make sagemaker-tune` | HyperParameter Tuning Job (6 essais, objectif `test_wape`) |
+| `make sagemaker-tune` | HyperParameter Tuning Job (6 essais, objectif `valid_wape`) |
 | `make sagemaker-pipeline` | SageMaker Pipeline `retail-forecast-mlops` (upsert) |
 | `make sagemaker-pipeline-run` | exécute le pipeline et attend (train → eval → gate → registry) |
 | `make sagemaker-deploy` | endpoint serverless du modèle approuvé (0 € au repos) |
@@ -40,7 +40,7 @@ src/retail_forecast/
   data/simulate.py     générateur de ventes (876k lignes, 20 magasins × 60 articles × 2 ans)
   data/load.py         charge un dataset quelconque (CSV/Parquet/JSON, local ou S3) -> schéma canonique
   features/build.py    lags 1→35, rolling mean/std 7/14/28, calendrier, time_split()
-  evaluate/metrics.py  WAPE, MAPE, RMSE, pinball loss
+  evaluate/metrics.py  WAPE, MAPE, RMSE, RMSLE, pinball loss
   train/train_lgbm.py  miroir local du Training Job SageMaker + baseline saisonnière
   ingest/storage.py    unique porte boto3 : raw_key(), gzip JSONL, chunking
   ingest/producer.py   rejoue le parquet → Kafka (--limit, --rate, --loop)
@@ -61,7 +61,7 @@ infra/sagemaker/
   serving.py           layout code/ sans modification des fichiers évalués
   train_entry.py       script exécuté DANS le conteneur (features + LightGBM)
   launch.py            boto3 create_training_job + packaging sourcedir.tar.gz
-  tuning.py            HyperParameter Tuning Job (objectif = test_wape, regex logs)
+  tuning.py            HyperParameter Tuning Job (objectif = valid_wape, regex logs)
   preprocess_entry.py  étape Processing : features calculées UNE fois -> features/
   evaluate_entry.py    étape Processing : artefact -> evaluation.json (gate WAPE)
   pipeline.py          SageMaker Pipeline (features -> train -> eval -> gate -> registry)
@@ -94,24 +94,28 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
 - ✅ Phase 3 ingestion Kafka → **Firehose DirectPut** → S3 (validée de bout en bout dans AWS :
   20 000 messages, objet Firehose de 164 Ko, 20 000 lignes JSON valides)
 - ✅ Phase 3b ETL `raw/` → `curated/` Parquet (dédup + typage)
-- ✅ Phase 4a : 16 modèles entraînés sur AWS, évaluation Processing indépendante :
+- ✅ Phase 4a : 48 boosters (moyenne et P10/P90 × 16 horizons) entraînés sur AWS, évaluation Processing indépendante :
   WAPE moyen **0,422609** vs baseline **0,559139** (gain 24,4 %).
-- ✅ Phase 4b : registre **v6**, artefact de serving vérifié et manifeste actif.
+- ✅ Phase 4b : registre **v7**, artefact de serving vérifié et manifeste actif.
   La v5 au mauvais layout de handler n'a jamais été activée et est Rejected.
 - ✅ Phase 4c : Batch Transform **19 200 lignes**, 1 200 séries × J+1…J+16 ;
   fichiers immuables `forecast/runs/`, sélection par `deployment/active.json`.
 - ✅ Phase 4d : features, training, évaluation et gate du Pipeline exécutés sur AWS.
-  Échec de format d'inscription corrigé, reprise Step Functions terminée avec succès.
+  Exécution complète du 26 novembre réussie sans reprise, inscription comprise.
   Voir `docs/learner_lab_workflows.md` pour les preuves et les limites du test.
-- 🟡 HPO (`tuning.py`) et endpoint serverless (`deploy.py`) : code et tests,
-  pas de nouvelle exécution AWS validée pendant cette correction.
+- ✅ HPO : six essais AWS terminés, objectif valid_wape sur J+1.
+- ✅ Endpoint serverless v7 : appel réel des 16 horizons, moyenne et quantiles valides.
 - ✅ Quotidien EventBridge -> Glue -> inférence -> publication testé avec succès,
-  même modèle v6, nouveau lot et précédent préservé ; horaires désactivés.
+  même modèle v7 le 26 novembre, nouveau lot et précédent préservé ; horaires désactivés.
 - ✅ Athena : vue `forecast_active` liée au manifeste, 2 KPI exécutés sur AWS.
 - ✅ Phase 6 : Streamlit hébergé sur `retail-forecast-nb`, AppTest exécuté sur AWS.
 - ✅ Phase 5 rapport LLM : `retail_forecast.agent.brief` (Ollama qwen2.5:3b)
-- ✅ `docs/report.md` : les 4 points du rendu PDF
-- ⏳ Reste : vidéo 2 min, répétition orale, quantiles P10/P90
+- ✅ `docs/rapport_final.md` et `output/pdf/rapport_final.pdf` : les 4 points du rendu PDF
+- ✅ Quantiles P10/P90 : couverture test 78,3 % pour 80 % nominal.
+- ✅ Vidéo de démonstration réelle : `output/video/demo_projet4.mp4`, 120 secondes.
+- ✅ Rapport PDF, slides corrigées et script de dix minutes : `output/`, `docs/soutenance_10min.md`.
+- ✅ Fin du test : notebook arrêté, endpoint supprimé, aucun job actif, horaires désactivés.
+- ⏳ Reste à l’étudiant : répétition orale et présentation.
 
 ## Décisions déjà arbitrées (ne pas les reproposer)
 

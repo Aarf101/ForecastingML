@@ -56,6 +56,8 @@ def run_forecast(sm, s3, package_arn, run_id):
     current = sales[sales["date"] == sales["date"].max()]
     if rows[["store_id", "item_id"]].drop_duplicates().shape[0] != current[["store_id", "item_id"]].drop_duplicates().shape[0]:
         raise ValueError("couverture incomplète : séries absentes ou historique insuffisant")
+    if metadata.get("quantiles"):
+        rows["return_quantiles"] = True
     name = f"retail-transform-{run_id}"
     batch.ensure_model(sm, name, container["Image"], container["ModelDataUrl"])
     uri = batch.upload_rows(s3, rows, metadata["features"],
@@ -65,6 +67,9 @@ def run_forecast(sm, s3, package_arn, run_id):
     batch.collect_output(s3, rows, package["ModelPackageVersion"], name, forecast_key=key)
     metrics = {key: sum(m[key] for m in metadata["metrics"].values()) / len(metadata["metrics"])
                for key in ["test_wape", "baseline_wape", "test_bias"]}
+    for field in ["test_rmsle", "test_coverage_80", "test_pinball_p10", "test_pinball_p90", "test_interval_width"]:
+        if all(field in m for m in metadata["metrics"].values()):
+            metrics[field] = sum(m[field] for m in metadata["metrics"].values()) / len(metadata["metrics"])
     return {"metrics": metrics, "model_package_arn": package_arn, "forecast_key": key, "run_id": run_id,
             "model_data_url": container["ModelDataUrl"], "target": "observed_sales",
             "active_series": len(current[["store_id", "item_id"]].drop_duplicates()),

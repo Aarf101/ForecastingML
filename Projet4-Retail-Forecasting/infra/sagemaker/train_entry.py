@@ -36,7 +36,7 @@ sys.path.insert(0, str(CODE_DIR))
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from retail_forecast.evaluate.metrics import bias, rmse, wape  # noqa: E402
+from retail_forecast.evaluate.metrics import bias, rmse, rmsle, pinball_loss, wape  # noqa: E402
 from retail_forecast.features.build import (  # noqa: E402
     TARGET,
     add_target,
@@ -99,6 +99,7 @@ def main() -> int:
                     type=int, default=56)
     ap.add_argument("--test-days", "--test_days", dest="test_days",
                     type=int, default=28)
+    ap.add_argument("--quantiles", type=str.lower, choices=["true", "false"], default="true")
     args = ap.parse_args()
     horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
 
@@ -160,10 +161,25 @@ def main() -> int:
             "valid_wape": wape(y_va, pred_va),
             "test_wape": wape(y_te, pred),
             "test_rmse": rmse(y_te, pred),
+            "test_rmsle": rmsle(y_te, pred),
             "test_bias": bias(y_te, pred),
             "baseline_wape": base_wape,
             "improvement_vs_baseline": (base_wape - wape(y_te, pred)) / base_wape,
         }
+        if args.quantiles == "true":
+            # Les quantiles sont ajustés sur train et arrêtés sur validation uniquement.
+            bounds = []
+            for quantile in (0.1, 0.9):
+                quantile_params = {**params, "objective": "quantile", "metric": "quantile", "alpha": quantile}
+                quantile_model = _fit(lgb.LGBMRegressor(**quantile_params), X_tr, y_tr,
+                                      X_va, y_va, args.early_stopping_rounds)
+                quantile_model.booster_.save_model(str(model_dir / f"quantile_{horizon}_{int(quantile * 100)}.txt"))
+                bounds.append(np.clip(quantile_model.predict(X_te), 0, None))
+            lower, upper = np.minimum(*bounds), np.maximum(*bounds)
+            metrics.update({"test_pinball_p10": pinball_loss(y_te, lower, .1),
+                            "test_pinball_p90": pinball_loss(y_te, upper, .9),
+                            "test_coverage_80": float(np.mean((y_te >= lower) & (y_te <= upper))),
+                            "test_interval_width": float(np.mean(upper - lower))})
         by_horizon[str(horizon)] = metrics
         model.booster_.save_model(str(model_dir / f"model_{horizon}.txt"))
         print(
@@ -190,6 +206,8 @@ def main() -> int:
         json.dumps(
             {
                 "framework": "lightgbm",
+                "quantiles": [0.1, 0.9] if args.quantiles == "true" else [],
+                "interval_method": "lightgbm_quantile_regression_sorted",
                 "horizons": horizons,
                 "features": features,
                 "categorical_levels": categorical_levels(base),

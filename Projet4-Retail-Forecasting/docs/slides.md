@@ -1,5 +1,9 @@
 # Exposé idée projet — 5 slides (langage simple)
 
+> Archive de préparation initiale. Pour la soutenance finale, utiliser
+> [le script de dix minutes](soutenance_10min.md), [les slides actualisées](slides.pptx)
+> et [le rapport final](rapport_final.md). Les objectifs et états ci-dessous sont historiques.
+
 > Projet 4 · Retail ML Forecasting · MIT 2026
 > Version à présenter : `docs/slides.pptx`. Script parlé : `docs/script.md`.
 

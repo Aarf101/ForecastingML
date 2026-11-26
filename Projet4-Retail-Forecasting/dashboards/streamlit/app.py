@@ -146,7 +146,7 @@ k1, k2, k3, k4 = st.columns(4)
 k1.metric("Unités prévues", f"{view['forecast_units'].sum():,.0f}")
 k2.metric("Séries couvertes", f"{view[['store_id', 'item_id']].drop_duplicates().shape[0]:,}")
 k3.metric("Dates cibles", view["target_date"].nunique())
-k4.metric("Horizons", ", ".join(f"J+{h}" for h in sorted(view["horizon"].unique())))
+k4.metric("Plage des horizons", f"J+{view.horizon.min()} à J+{view.horizon.max()}")
 
 # ---- prévu vs réalisé ------------------------------------------------------
 st.subheader("Prévu vs réalisé — une série")
@@ -179,6 +179,13 @@ if len(series):
                 name="prévision",
                 line=dict(color="#f7a85b", dash="dash"),
             )
+        if {"p10", "p90"}.issubset(fut.columns) and len(fut):
+            fig.add_scatter(x=fut["target_date"], y=fut["p10"], mode="lines",
+                            line=dict(width=0), name="P10", showlegend=False)
+            fig.add_scatter(x=fut["target_date"], y=fut["p90"], mode="lines", fill="tonexty",
+                            fillcolor="rgba(247,168,91,0.20)", line=dict(width=0),
+                            name="P10–P90 (80 % nominal)")
+            st.caption("Intervalle issu de régressions quantiles ; couverture nominale de 80 %, sans garantie individuelle.")
         fig.update_layout(height=380, margin=dict(l=10, r=10, t=30, b=10),
                           legend=dict(orientation="h", y=1.1))
         st.plotly_chart(fig, use_container_width=True)
@@ -243,8 +250,8 @@ st.dataframe(
 )
 st.caption(
     "Coefficient de variation = écart-type / moyenne sur 28 jours. "
-    "Plus il est élevé, plus la demande est irrégulière : c'est là qu'un stock "
-    "de sécurité large (P90) se justifie."
+    "Plus il est élevé, plus les ventes observées sont irrégulières. "
+    "Une décision de stock exige aussi délais, coûts et niveau de service."
 )
 
 with st.expander("Télécharger les prévisions (CSV)"):

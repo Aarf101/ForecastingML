@@ -1,4 +1,9 @@
-# Rapport technique — Retail ML Forecasting (Projet 4)
+# Rapport technique — archive des premières exécutions
+
+> Document historique : les passages et chiffres antérieurs sont conservés pour traçabilité.
+> Pour le rendu, utiliser [le rapport final](rapport_final.md), son [PDF](../output/pdf/rapport_final.pdf)
+> et [les preuves du 26 novembre](evidence/completion_2026-11-26.json).
+> Cette archive ne décrit pas l’état actuel du déploiement.
 
 **Prévision des ventes observées J+1 à J+16 par (magasin, article) sur AWS**
 

@@ -56,7 +56,9 @@ def model_fn(model_dir: str) -> dict:
         raise RuntimeError(f"aucun model_<h>.txt dans {root}")
     metadata = json.loads((root / "metadata.json").read_text())
     print(f"[inference] horizons chargés : {sorted(models)}")
-    return {"models": models, "features": metadata["features"]}
+    quantiles = {h: {q: lgb.Booster(model_file=str(root / f"quantile_{h}_{q}.txt"))
+                     for q in (10, 90)} for h in models} if metadata.get("quantiles") else {}
+    return {"models": models, "features": metadata["features"], "quantiles": quantiles}
 
 
 def _as_frame(data, features: list[str]) -> pd.DataFrame:
@@ -101,4 +103,17 @@ def predict_fn(data, model: dict) -> list[float]:
     if np.isnan(out).any():
         unknown = sorted(set(horizons[np.isnan(out)]))
         raise ValueError(f"aucun modèle pour les horizons {unknown}")
+    if "return_quantiles" in frame and frame["return_quantiles"].any():
+        if not frame["return_quantiles"].eq(True).all() or not model.get("quantiles"):
+            raise ValueError("requête de quantiles incompatible avec le modèle")
+        lower, upper = np.full(len(frame), np.nan), np.full(len(frame), np.nan)
+        for horizon, boosters in model["quantiles"].items():
+            mask = horizons == horizon
+            if mask.any():
+                bounds = [np.clip(boosters[q].predict(frame.loc[mask, features]), 0, None) for q in (10, 90)]
+                lower[mask], upper[mask] = np.minimum(*bounds), np.maximum(*bounds)
+        if not np.isfinite(lower).all() or not np.isfinite(upper).all():
+            raise ValueError("quantiles non finis")
+        return [{"forecast_units": float(point), "p10": float(lo), "p90": float(hi)}
+                for point, lo, hi in zip(out, lower, upper)]
     return out.tolist()

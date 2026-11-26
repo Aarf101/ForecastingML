@@ -72,45 +72,45 @@ def arr(p1, p2, style='-', lw=1.15, label=None, lpos=0.5, ldx=0.0, ldy=0.11,
 ax.text(0.18, 6.20, 'Projet 4 — Retail ML Forecasting : architecture AWS',
         fontsize=12.6, family=F, weight='bold', color='#0d2b45', va='center')
 ax.text(0.18, 5.96,
-        'Prédiction de la demande (M5 / Rossmann)   ·   SageMaker + Kafka/MSK + agent LLM   ·   binôme, soutenance 10 min',
+        'Ventes observées (données synthétiques)   ·   SageMaker + Kafka EC2 + brief LLM   ·   binôme, soutenance 10 min',
         fontsize=7.9, family=F, color='#5a6b7b', va='center')
 
 # ---------------- stage headers ----------------
 for x, t, k in [(COL[0], '① SOURCES', 'src'), (COL[1], '② INGESTION', 'ing'),
                 (COL[2], '③ LAKE & ETL', 'lake'), (COL[3], '④ SAGEMAKER ML', 'ml'),
-                (COL[4], '⑤ SERVING', 'srv'), (COL[5], '⑥ LLM & AGENT', 'agt'),
+                (COL[4], '⑤ SERVING', 'srv'), (COL[5], '⑥ BRIEF LLM', 'agt'),
                 (COL[6], '⑦ DASHBOARD', 'bi')]:
     head(x, 5.66, t, T[k][1])
 
 # ---------------- boxes ----------------
-box(COL[0], r1, BW, BH, 'Sales CSV\n(M5 / Rossmann)\nbackfill', 'src')
+box(COL[0], r1, BW, BH, 'Ventes synthétiques\nCSV / Parquet\nbackfill', 'src')
 box(COL[0], r2, BW, BH, 'POS event\nsimulator\n(Python replay)', 'src')
 
-box(COL[1], r1, BW, BH, 'Kafka topic\nsales.events\n(Redpanda ⟷ MSK)', 'ing')
-box(COL[1], r2, BW, BH, 'Kinesis Data\nStreams + Firehose\n(60 s micro-batch)', 'ing', fs=7.2)
+box(COL[1], r1, BW, BH, 'Kafka topic\nsales.events\n(Kafka EC2 / Redpanda)', 'ing')
+box(COL[1], r2, BW, BH, 'Firehose DirectPut\npont Kafka vers S3\n(micro-lots)', 'ing', fs=7.2)
 
 box(COL[2], r1, BW, BH, 'S3  raw/\nJSON.gz partitions', 'lake')
-box(COL[2], r2, BW, BH, 'Glue ETL (PySpark)\nou Lambda\nclean · dedupe', 'lake', fs=7.2)
+box(COL[2], r2, BW, BH, 'Glue ETL (PySpark)\nStep Functions\nclean · dedupe', 'lake', fs=7.2)
 box(COL[2], r3, BW, BH, 'S3  curated/\nParquet (store, date)', 'lake')
-box(COL[2], r4, BW, BH, 'Glue Crawler\n→ Athena (KPI)', 'lake')
+box(COL[2], r4, BW, BH, 'Tables Glue / Athena\nKPI actifs', 'lake')
 
 box(COL[3], r2, BW, BH, 'Processing Job\nfeatures: lags,\ncalendar, promo', 'ml', fs=7.2)
 box(COL[3], r3, BW, BH, 'Training Job\nLightGBM global\n+ HPO', 'ml', weight='bold')
-box(COL[3], r4, BW, BH, 'Evaluation +\nConditionStep\nWAPE · MAPE · RMSE', 'ml', fs=7.0)
-box(COL[3], r5, BW, BH, 'Model Registry\napprove → prod', 'ml')
+box(COL[3], r4, BW, BH, 'Evaluation +\nConditionStep\nWAPE · RMSLE · P10/P90', 'ml', fs=7.0)
+box(COL[3], r5, BW, BH, 'Model Registry\ncandidat approuvé', 'ml')
 
 box(COL[4], r2, BW, BH, 'Model Monitor\n+ CloudWatch', 'srv', dashed=True, fs=7.3)
 box(COL[4], r3, BW, BH, 'SageMaker Endpoint\n(serverless)', 'srv', fs=7.3)
-box(COL[4], r4, BW, BH, 'Batch Transform\n28-day forecast', 'srv', fs=7.3)
-box(COL[4], r5, BW, BH, 'S3  forecast/\nP10 · P50 · P90', 'srv', fs=7.3)
+box(COL[4], r4, BW, BH, 'Batch Transform\n16-day forecast', 'srv', fs=7.3)
+box(COL[4], r5, BW, BH, 'S3 forecast/ + actif\nP10 · moyenne · P90', 'srv', fs=7.3)
 
 box(COL[5], 3.61, BW, 1.34,
-    'LangGraph agent\ntools: get_forecast,\nKPIs, stockout_risk(P90),\nanomalies\nRAG: promos, lead times\nLLM: Bedrock · JumpStart\n· Ollama (local)\nbrief hebdo → S3',
+    'Chaîne LangChain\nagrégats des ventes\nprompt structuré\nOllama (local)\nvalidation du texte\nbrief hebdo → S3',
     'agt', fs=7.0, lh=1.42)
 
 box(COL[6], 4.19, BW, 0.52, 'QuickSight\n(production option)', 'bi', dashed=True, fs=6.9)
 box(COL[6], 3.34, BW, 1.02,
-    'Streamlit dashboard\nKPIs · forecast vs actual\nstockout risks\n« Ask the analyst » chat\nrefresh → pipeline',
+    'Streamlit dashboard\nKPI · historique / prévu\nfiltres magasin / article\nbandes P10/P90\nversion du modèle',
     'bi', fs=7.0, lh=1.42)
 
 # ---------------- edges ----------------
@@ -118,9 +118,9 @@ arr((COL[0] + BW/2, r1), (COL[1] - BW/2, r1), label='replay', ldy=0.14)
 arr((COL[0] + BW/2, r2 + 0.10), (COL[1] - BW/2, r1 - 0.12))
 arr((COL[1], r1 - BH/2), (COL[1], r2 + BH/2), label='consume', ldx=0.36, ldy=0.0)
 arr((COL[1] + BW/2, r2 + 0.12), (COL[2] - BW/2, r1 - 0.12), label='put', ldy=0.15)
-arr((COL[2], r1 - BH/2), (COL[2], r2 + BH/2), label='S3 event', ldx=0.46, ldy=0.0, fs=6.3)
+arr((COL[2], r1 - BH/2), (COL[2], r2 + BH/2), label='workflow', ldx=0.46, ldy=0.0, fs=6.3)
 arr((COL[2], r2 - BH/2), (COL[2], r3 + BH/2), label='Parquet', ldx=0.41, ldy=0.0, fs=6.3)
-arr((COL[2], r3 - BH/2), (COL[2], r4 + BH/2), style='--', label='crawl', ldx=0.35, ldy=0.0, fs=6.3)
+arr((COL[2], r3 - BH/2), (COL[2], r4 + BH/2), style='--', label='DDL SQL', ldx=0.35, ldy=0.0, fs=6.3)
 arr((COL[2] + BW/2, r3 - 0.04), (COL[3] - BW/2, r2 + 0.04), label='train', ldy=0.15, fs=6.3)
 arr((COL[3], r2 - BH/2), (COL[3], r3 + BH/2), label='features', ldx=0.45, ldy=0.0, fs=6.3)
 arr((COL[3], r3 - BH/2), (COL[3], r4 + BH/2), label='model', ldx=0.39, ldy=0.0, fs=6.3)
@@ -130,12 +130,12 @@ arr((COL[3] + BW/2, r5 + 0.02), (COL[4] - BW/2, r4 - 0.02), label='daily', ldy=-
 arr((COL[4], r3 + BH/2), (COL[4], r2 - BH/2), style=':', label='drift', ldx=0.34, ldy=0.0, fs=6.3)
 arr((COL[4], r4 - BH/2), (COL[4], r5 + BH/2), label='P10/90', ldx=0.40, ldy=0.0, fs=6.3)
 arr((COL[4] + BW/2, r5 + 0.12), (COL[5] - BW/2, 3.10), label='forecasts', ldy=-0.15, fs=6.3)
-arr((COL[5] + BW/2, 3.72), (COL[6] - BW/2, 3.44), both=True, label='chat', ldy=0.13, fs=6.3)
+arr((COL[5] + BW/2, 3.72), (COL[6] - BW/2, 3.44), label='brief', ldy=0.13, fs=6.3)
 arr((COL[4] + BW/2, r5 - 0.04), (COL[6] - BW/2 - 0.10, 2.90), style=':', label='S3 / Athena', ldy=-0.02, fs=6.3)
 
 # ---------------- MLOps bar ----------------
 box(6.50, 0.74, 12.64, 0.36,
-    '⑧  MLOps transversal :   EventBridge (quotidien) → Step Functions / SageMaker Pipelines    ·    CloudWatch metrics & alarms    ·    versioning S3    ·    tags de coût    ·    teardown',
+    '⑧  MLOps transversal :   EventBridge (mensuel / quotidien) → Step Functions / SageMaker Pipelines    ·    CloudWatch metrics & alarms    ·    versioning S3    ·    tags de coût    ·    teardown',
     'ops', fs=7.2)
 
 # ---------------- legend ----------------
@@ -151,7 +151,7 @@ ax.text(4.99, ly, 'supervision', fontsize=6.8, family=F, color='#3d3d3d', va='ce
 ax.text(0.18, 3.52, 'Contraintes AWS Learner Lab (plan B intégré)', fontsize=7.4,
         family=F, weight='bold', color='#8a4b00', va='center')
 for i, line in enumerate([
-    '• MSK indisponible → Redpanda local, Kinesis en AWS',
+    '• MSK indisponible → Kafka EC2, Redpanda local',
     '• Bedrock souvent bloqué → JumpStart / Ollama',
     '• QuickSight hors lab → Streamlit (option QuickSight)',
     '• Rôle unique LabRole · endpoint serverless · teardown',

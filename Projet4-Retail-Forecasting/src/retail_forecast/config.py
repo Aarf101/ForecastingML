@@ -84,7 +84,7 @@ class Settings:
             wape_threshold=float(e.get("WAPE_THRESHOLD", "0.30")),
             llm_provider=e.get("LLM_PROVIDER", "ollama").lower(),
             llm_endpoint=e.get("LLM_ENDPOINT", "retail-llm-hf"),
-            ollama_model=e.get("OLLAMA_MODEL", "llama3.1:8b"),
+            ollama_model=e.get("OLLAMA_MODEL", "qwen2.5:3b"),
             ollama_base_url=e.get("OLLAMA_BASE_URL", "http://localhost:11434"),
             bedrock_model_id=e.get(
                 "BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"

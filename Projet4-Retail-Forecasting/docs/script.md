@@ -1,5 +1,9 @@
 # Script parlé — les 3 diapositives de `pres.pdf`
 
+> Archive de préparation initiale. Pour la soutenance finale, utiliser
+> [le script de dix minutes](soutenance_10min.md), [les slides actualisées](slides.pptx)
+> et [le rapport final](rapport_final.md). Les objectifs et états ci-dessous sont historiques.
+
 > Durée totale : **≈ 3 min 30**. Débit : lent, une idée par phrase.
 > Les phrases en **gras** sont à dire telles quelles. Le reste est une indication de jeu.
 > ⚠️ La diapositive d'architecture indique **16 jours** d'horizon : le script suit la

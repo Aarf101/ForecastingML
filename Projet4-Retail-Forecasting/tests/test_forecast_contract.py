@@ -78,6 +78,9 @@ def test_training_artifact_independent_evaluation_and_serving(tmp_path, monkeypa
     assert len(predictions) == 32
     assert np.isfinite(predictions).all()
     assert min(predictions) >= 0
+    intervals = inference.predict_fn(rows.assign(return_quantiles=True), inference.model_fn(str(model_dir)))
+    assert all(0 <= item["p10"] <= item["p90"] for item in intervals)
+    assert [item["forecast_units"] for item in intervals] == predictions
 
     archive = tmp_path / "model.tar.gz"
     with tarfile.open(archive, "w:gz") as tar:
@@ -93,6 +96,8 @@ def test_training_artifact_independent_evaluation_and_serving(tmp_path, monkeypa
     assert actual is not None
     for horizon in map(str, range(1, 17)):
         assert actual[horizon] == pytest.approx(metadata["metrics"][horizon]["test_wape"])
+        assert evaluate_entry.INDEPENDENT_DETAILS[horizon]["coverage_80"] == pytest.approx(metadata["metrics"][horizon]["test_coverage_80"])
+        assert evaluate_entry.INDEPENDENT_DETAILS[horizon]["rmsle"] == pytest.approx(metadata["metrics"][horizon]["test_rmsle"])
 
 
 def test_llm_prompt_does_not_invent_quality_or_volatility(monkeypatch):
@@ -195,3 +200,60 @@ def test_local_mock_mode_reads_local_forecast_without_cloud_manifest(tmp_path, m
     assert brief._load_forecast().forecast_units.tolist() == [3.]
     assert brief._load_metrics()["test_wape"] == .4
     remote.assert_not_called()
+
+
+def test_langchain_chain_validates_model_output(monkeypatch):
+    pytest.importorskip("langchain_core")
+    from retail_forecast.agent import brief
+    monkeypatch.setattr(brief, "_load_metrics", lambda: {})
+    frame = pd.DataFrame({"horizon": [1], "store_id": ["S01"], "item_id": ["I001"], "forecast_units": [3.]})
+    monkeypatch.setattr(brief, "generate", lambda *a, **kw: json.dumps({
+        "analyse": json.loads(brief.prompt_inputs(frame)["faits_json"]),
+        "actions": json.loads(brief.prompt_inputs(frame)["actions_json"])[:2]}))
+    assert "3 unités" in brief.generate_brief(frame, "ollama")
+    with pytest.raises(ValueError):
+        brief.validate_brief(json.dumps({"analyse": ["99999 unités", "a", "b"], "actions": ["a", "b"]}), "3 unités")
+
+
+def test_sagemaker_boolean_coercion_is_accepted(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["train_entry.py", "--quantiles", "False"])
+    def parsed(channel):
+        raise RuntimeError("parsing successful")
+    monkeypatch.setattr(train_entry, "_read_channel", parsed)
+    with pytest.raises(RuntimeError, match="parsing successful"): train_entry.main()
+
+
+@pytest.mark.parametrize('bounds', [(1., 5.), (-1., 5.), (5., 1.), (1., float('inf'))])
+def test_quantile_batch_output_is_validated_before_publication(bounds):
+    from unittest.mock import Mock
+    sales = simulate_sales(n_stores=1, n_items=1, days=45, seed=4)
+    rows = batch.build_inference_rows(sales, feature_columns(build_features(sales)), [1])
+    rows['return_quantiles'] = True
+    s3 = Mock()
+    s3.get_object.return_value = {'Body': io.BytesIO(json.dumps([{
+        'forecast_units': 3., 'p10': bounds[0], 'p90': bounds[1]}]).encode())}
+    if bounds == (1., 5.):
+        result = batch.collect_output(s3, rows, 7, 'quantile-job')
+        assert result.p10.iloc[0] == 1. and result.p90.iloc[0] == 5.
+        s3.put_object.assert_called_once()
+    else:
+        with pytest.raises(ValueError): batch.collect_output(s3, rows, 7, 'quantile-job')
+        s3.put_object.assert_not_called()
+
+
+def test_llm_rejects_unmeasured_stability():
+    from retail_forecast.agent.brief import validate_brief
+    with pytest.raises(ValueError, match='non mesurée'):
+        validate_brief(json.dumps({'analyse': ['Ventes stables', 'a', 'b'], 'actions': ['a', 'b']}), '')
+
+
+def test_brief_rejects_invented_claim_using_only_known_numbers(monkeypatch):
+    """Des chiffres connus ne valident pas une relation métier inventée."""
+    from retail_forecast.agent import brief
+    monkeypatch.setattr(brief, '_load_metrics', lambda: {'test_wape': .4, 'baseline_wape': .5})
+    frame = pd.DataFrame({'horizon': [1], 'store_id': ['S01'], 'item_id': ['I001'], 'forecast_units': [3.]})
+    inputs = brief.prompt_inputs(frame)
+    facts = json.loads(inputs['faits_json'])
+    facts[0] = 'Le WAPE de la série S01/I001 est 40.0%.'
+    with pytest.raises(ValueError, match='non autorisée'):
+        brief.validate_brief(json.dumps({'analyse': facts, 'actions': json.loads(inputs['actions_json'])[:2]}), brief.build_prompt(frame))

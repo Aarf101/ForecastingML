@@ -133,9 +133,9 @@ def draw_training() -> Path:
     y1, y2 = 3.55, 2.12
 
     row_a = [
-        ("source", "Données", "POS · M5"),
-        ("msk", "Kafka", "MSK"),
-        ("firehose", "Firehose", "60 s"),
+        ("source", "Données", "ventes synthétiques"),
+        ("msk", "Kafka", "EC2 · Redpanda"),
+        ("firehose", "Firehose", "pont DirectPut"),
         ("s3", "S3 raw", "JSON.gz"),
         ("glue", "Glue ETL", "clean · dedupe"),
         ("s3", "S3 curated", "Parquet"),
@@ -177,13 +177,13 @@ def draw_inference() -> Path:
     xs = [1.63 + i * 2.45 for i in range(4)]
     y1, y2 = 2.95, 1.85
 
-    node(ax, xs[0], y1, "sagemaker", "Registry", "modèle approuvé", SM)
+    node(ax, xs[0], y1, "sagemaker", "Registry", "actif via manifeste", SM)
     node(ax, xs[1], y1, "sagemaker", "Endpoint", "temps réel", VIOLET)
     node(ax, xs[3], y1, "cloudwatch", "Model Monitor", "", SM, dashed=True)
 
     node(ax, xs[0], y2, "s3", "S3 curated", "features", GREEN)
-    node(ax, xs[1], y2, "sagemaker", "Batch", "28 jours", VIOLET)
-    node(ax, xs[2], y2, "s3", "S3 forecast", "P10 · P50 · P90", VIOLET)
+    node(ax, xs[1], y2, "sagemaker", "Batch", "16 jours", VIOLET)
+    node(ax, xs[2], y2, "s3", "S3 forecast", "P10 · moyenne · P90", VIOLET)
     node(ax, xs[3], y2, "dashboard", "Dashboard", "Streamlit", PINK)
 
     arrow(ax, (xs[0] + BW / 2, y1), (xs[1] - BW / 2, y1))

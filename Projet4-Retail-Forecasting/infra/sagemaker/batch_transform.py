@@ -126,13 +126,20 @@ def _role() -> str:
     return f"arn:aws:iam::{account}:role/LabRole"
 
 
-def ensure_model(sm, name: str, image: str, model_url: str) -> str:
+def ensure_model(sm, name: str, image: str, model_url: str, *, serverless: bool = False) -> str:
     """Crée la ressource Model (conteneur + artefact + handler d'inférence)."""
+    extra_environment = ({
+        # Serverless installe sinon dans un site utilisateur non importable.
+        "PIP_TARGET": "/opt/ml/model/code", "PIP_USER": "0",
+        "PIP_NO_DEPS": "1",
+        "PYTHONPATH": "/opt/ml/model/code",
+    } if serverless else {})
     try:
         existing = sm.describe_model(ModelName=name)['PrimaryContainer']
         if (existing.get('ModelDataUrl') != model_url or existing.get('Image') != image
                 or existing.get('Environment', {}).get('SAGEMAKER_SUBMIT_DIRECTORY') != '/opt/ml/model/code'
-                or existing.get('Environment', {}).get('SAGEMAKER_PROGRAM') != 'inference.py'):
+                or existing.get('Environment', {}).get('SAGEMAKER_PROGRAM') != 'inference.py'
+                or any(existing.get('Environment', {}).get(k) != v for k, v in extra_environment.items())):
             raise ValueError('modèle existant incompatible : recréer le déploiement')
         print(f"[transform] modèle existant : {name}")
     except ClientError as exc:
@@ -155,6 +162,7 @@ def ensure_model(sm, name: str, image: str, model_url: str) -> str:
                     # sans cette variable, `pip install` échoue au démarrage et
                     # l'endpoint passe en Failed ("model process exited").
                     "PIP_BREAK_SYSTEM_PACKAGES": "1",
+                    **extra_environment,
                 },
             },
             ExecutionRoleArn=_role(),
@@ -167,6 +175,8 @@ def upload_rows(s3, rows: pd.DataFrame, features: list[str], *, input_key: str =
     """Écrit une ligne JSON par (série, horizon) dans S3."""
     cols = ["store_id", "item_id", "date", "horizon", "target_date", *features]
     payload = rows[cols].copy()
+    if "return_quantiles" in rows:
+        payload["return_quantiles"] = rows["return_quantiles"]
     payload["date"] = payload["date"].astype(str)
     payload["target_date"] = payload["target_date"].astype(str)
     body = "\n".join(
@@ -243,7 +253,19 @@ def collect_output(s3, rows: pd.DataFrame, version: int, job_name: str, *, forec
 
     forecast = rows[["store_id", "item_id", "date", "target_date", "horizon"]].copy()
     forecast = forecast.rename(columns={"date": "origin_date"})
-    forecast["forecast_units"] = [_prediction(l) for l in lines]
+    parsed = [json.loads(line) for line in lines]
+    parsed = [value[0] if isinstance(value, list) and len(value) == 1 else value for value in parsed]
+    intervals = all(isinstance(value, dict) and set(value) == {"forecast_units", "p10", "p90"} for value in parsed)
+    if "return_quantiles" in rows and rows["return_quantiles"].all() and not intervals:
+        raise ValueError("sortie sans quantiles : publication bloquée")
+    forecast["forecast_units"] = [float(v["forecast_units"]) for v in parsed] if intervals else [_prediction(l) for l in lines]
+    if intervals:
+        for column in ["p10", "p90"]:
+            forecast[column] = [float(v[column]) for v in parsed]
+            if not forecast[column].map(lambda value: math.isfinite(value) and value >= 0).all():
+                raise ValueError("quantiles invalides")
+        if not forecast.p10.le(forecast.p90).all():
+            raise ValueError("quantiles croisés")
     if not forecast["forecast_units"].map(lambda value: math.isfinite(value) and value >= 0).all():
         raise ValueError("prévisions invalides : publication du Parquet bloquée")
     forecast["model_version"] = f"v{version}"

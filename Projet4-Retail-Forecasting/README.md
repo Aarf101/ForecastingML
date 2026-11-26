@@ -1,6 +1,6 @@
 # Projet 4 — Retail ML Forecasting (MIT 2026)
 
-Prédiction de la demande de produits : pipeline complet **Kafka/MSK → S3 → ETL →
+Prédiction de la demande de produits : pipeline complet **Kafka EC2 → Firehose DirectPut → S3 → ETL →
 SageMaker → prévisions → dashboard**, avec rapport LLM optionnel, selon le sujet n°4 du PDF
 `1 Déroulement Cours Projet CL ML 2026.pdf` (« Données de ventes (S3/Kafka),
 modèle de prévision dans SageMaker, dashboard dynamique »).
@@ -16,6 +16,25 @@ Diagramme détaillé et justifications : **[docs/architecture.md](docs/architect
 [la preuve JSON](docs/evidence/aws_evaluation.json). Les autres anciennes métriques
 ci-dessous précèdent la correction du split et de la baseline.
 
+## Rendu du 26 novembre 2026
+
+Le workflow mensuel complet a réussi sans reprise, avec **v7**, **19 200 prévisions**
+et des quantiles **P10/P90** sur les 16 horizons. L’évaluation indépendante mesure
+une couverture empirique de **78,3 %**, pour 80 % nominal. Le HPO a terminé ses
+six essais sur J+1 ; son objectif est `valid_wape`. **150 tests locaux passent.**
+
+- [Rapport final PDF](output/pdf/rapport_final.pdf) et [version texte](docs/rapport_final.md).
+- [Diapositives éditables](docs/slides.pptx) et [PDF](output/pdf/slides.pdf).
+- [Vidéo de deux minutes](output/video/demo_projet4.mp4).
+- [Script de soutenance de dix minutes](docs/soutenance_10min.md).
+- [Preuves du 26 novembre](docs/evidence/completion_2026-11-26.json).
+
+Les dates cibles sont relatives au **30 décembre 2024**, dernière observation du
+jeu synthétique ; il ne s’agit pas de prévisions commerciales actuelles.
+Les anciens rapports ci-dessous sont conservés comme historique.
+En fin de test : notebook arrêté, endpoint supprimé, aucun job actif, horaires
+désactivés ; données et modèles conservés. Voir [la preuve de nettoyage](docs/evidence/cleanup_2026-11-26.json).
+
 ## État d'avancement
 
 | Phase | Contenu | État |
@@ -25,10 +44,10 @@ ci-dessous précèdent la correction du split et de la baseline.
 | 2 | Features + métriques + baseline LightGBM locale | ✅ |
 | 3a | Ingestion Kafka → S3 (Redpanda + s3mock en local) | ✅ |
 | 3b | ETL : nettoyage/dédup → `curated/` Parquet | ✅ Glue exécuté dans AWS |
-| 4 | SageMaker : Processing / Training / évaluation / Registry / Batch | ✅ Évaluation, reprise contrôlée, publication AWS ; HPO et serverless optionnels non validés |
-| 5 | Rapport LLM Ollama / SageMaker, sans agent autonome | Code présent ; service LLM requis |
+| 4 | SageMaker : Processing / Training / évaluation / Registry / Batch | ✅ Mensuel complet sans reprise ; v7, P10/P90, HPO et endpoint validés |
+| 5 | Rapport LLM LangChain / Ollama, sans agent autonome | ✅ Génération réelle validée et publiée dans S3 |
 | 6 | Dashboard Streamlit | ✅ Hébergé et testé sur le notebook AWS, données S3 actives |
-| 7 | Rapport, vidéo 2 min, soutenance | ⏳ |
+| 7 | Rapport, vidéo 2 min, soutenance | ✅ PDF, slides, vidéo et script livrés ; répétition personnelle restante |
 
 ## Workflows AWS Learner Lab
 
@@ -41,6 +60,15 @@ Le test réel EventBridge -> Glue -> inférence -> publication a réussi, en
 conservant le modèle v6 : [preuves AWS](docs/evidence/aws_workflows.json).
 Le notebook `retail-forecast-nb` héberge le dashboard (`/proxy/8501/` depuis
 Jupyter). Les horaires récurrents restent désactivés.
+
+## Rapport LLM optionnel
+
+Installer les dépendances avec `.venv/bin/python -m pip install -e '.[llm,aws]'`.
+Démarrer `ollama serve`, puis `ollama pull qwen2.5:3b` si le modèle manque.
+Configurer `LLM_PROVIDER=ollama` et `OLLAMA_MODEL=qwen2.5:3b`, puis `make brief`.
+Le modèle choisit deux recommandations autorisées ; les faits sont calculés et
+recopiés sous contrôle d’un schéma JSON, puis validés avant publication dans S3.
+Les prévisions et le dashboard fonctionnent sans ce rapport textuel.
 
 ## Démarrage rapide
 
@@ -59,7 +87,7 @@ make e2e          # tout enchaîner + vérifier les objets écrits
 make down         # arrêter les conteneurs
 
 make diagram      # régénère docs/diagrams/architecture.{png,svg}
-make slides       # régénère docs/slides.pptx (exposé idée projet, 5 slides)
+make slides       # régénère docs/slides.pptx (soutenance, 5 slides)
 ```
 
 **Sous Windows** : `make` n'est pas installé par défaut et les venv utilisent
@@ -76,7 +104,7 @@ data/raw/sales.parquet ──producer──> topic sales.events ──consumer�
 
 | Rôle | Local (Docker) | AWS (Learner Lab) |
 |------|----------------|-------------------|
-| Bus d'événements | Redpanda `localhost:19092` | MSK ou Kinesis Data Streams |
+| Bus d'événements | Redpanda `localhost:19092` | Kafka open-source sur EC2 + pont Firehose DirectPut |
 | Buffer 60 s | consumer (flush par taille/temps) | Firehose |
 | Stockage brut | s3mock `localhost:9090` | S3 |
 
@@ -147,11 +175,11 @@ Chaque slide a des notes d'orateur (onglet « Notes » dans PowerPoint).
 ## Choix structurants
 
 1. **Un seul module de features** (`features/build.py`) utilisé en local, dans un
-   Processing Job et dans Glue : pas de dérive entre dev et prod.
+   Processing Job SageMaker ; Glue fournit les ventes curated nettoyées.
 2. **Split temporel** et exclusion de `stock_on_hand` / `stockout` (fuites) :
    la question classique en soutenance est traitée d'avance.
-3. **WAPE** comme métrique principale. La pinball loss est disponible, mais les
-   quantiles P10/P90 ne sont pas encore entraînés ni livrés.
+3. **WAPE** comme métrique principale, RMSLE et pinball loss. Les quantiles
+   P10/P90 sont entraînés, évalués indépendamment et livrés avec v7.
 4. **Rapport LLM** via `ollama` ou `sagemaker` ; Bedrock n'est pas implémenté.
 
 ## Données

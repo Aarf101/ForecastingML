@@ -36,6 +36,8 @@ CURATED = Path("/opt/ml/processing/input/curated")
 CODE = Path("/opt/ml/processing/input/package")
 OUTPUT = Path("/opt/ml/processing/output")
 
+INDEPENDENT_DETAILS = {}
+
 TEST_DAYS = 28
 VALID_DAYS = 56
 
@@ -82,6 +84,7 @@ def _recompute(archive: Path) -> dict | None:
     Renvoie ``{horizon: wape}`` ou ``None`` si le recalcul n'est pas possible.
     Le point d'entrée bloque alors la publication du modèle.
     """
+    INDEPENDENT_DETAILS.clear()
     try:
         import numpy as np  # noqa: F401
         import pandas as pd  # noqa: F401
@@ -113,7 +116,7 @@ def _recompute(archive: Path) -> dict | None:
         import pandas as pd
         import lightgbm as lgb
 
-        from retail_forecast.evaluate.metrics import wape
+        from retail_forecast.evaluate.metrics import wape, rmsle, pinball_loss
         from retail_forecast.features.build import (
             TARGET,
             add_target,
@@ -155,6 +158,17 @@ def _recompute(archive: Path) -> dict | None:
             booster = lgb.Booster(model_file=str(model_dir / f"model_{horizon}.txt"))
             pred = np.clip(booster.predict(test[features]), 0.0, None)
             y = test[TARGET].to_numpy(dtype=float)
+            details = {"rmsle": rmsle(y, pred)}
+            if metadata.get("quantiles"):
+                bounds = [np.clip(lgb.Booster(model_file=str(model_dir / f"quantile_{horizon}_{q}.txt")).predict(test[features]), 0, None) for q in (10, 90)]
+                lower, upper = np.minimum(*bounds), np.maximum(*bounds)
+                if not np.isfinite(lower).all() or not np.isfinite(upper).all():
+                    raise ValueError("quantiles indépendants non finis")
+                details.update({"pinball_p10": pinball_loss(y, lower, .1),
+                                "pinball_p90": pinball_loss(y, upper, .9),
+                                "coverage_80": float(np.mean((y >= lower) & (y <= upper))),
+                                "interval_width": float(np.mean(upper - lower))})
+            INDEPENDENT_DETAILS[str(horizon)] = details
             resultat[str(horizon)] = float(wape(y, pred))
             print(f"[evaluate] h={horizon:>2}j  WAPE recalculé {resultat[str(horizon)]:.4f}")
         return resultat
@@ -219,6 +233,7 @@ def main() -> int:
         "best_horizon": best_h,
         "worst_horizon": worst_h,
         "independent": bool(recalcule),
+        "independent_details": INDEPENDENT_DETAILS,
         "source": source,
     }
 

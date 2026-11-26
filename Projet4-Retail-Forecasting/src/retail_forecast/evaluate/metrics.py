@@ -50,6 +50,14 @@ def rmse(y_true: Iterable[float], y_pred: Iterable[float]) -> float:
     return float(np.sqrt(np.mean((t - p) ** 2)))
 
 
+def rmsle(y_true: Iterable[float], y_pred: Iterable[float]) -> float:
+    """Erreur quadratique logarithmique pour des quantités finies positives ou nulles."""
+    t, p = _as_arrays(y_true, y_pred)
+    if not np.isfinite(t).all() or not np.isfinite(p).all() or (t < 0).any() or (p < 0).any():
+        raise ValueError("RMSLE exige des quantités finies positives ou nulles")
+    return float(np.sqrt(np.mean((np.log1p(t) - np.log1p(p)) ** 2)))
+
+
 def bias(y_true: Iterable[float], y_pred: Iterable[float]) -> float:
     """Biais relatif signé = ``sum(y_pred - y_true) / sum(y_true)``.
 
@@ -88,5 +96,6 @@ def evaluate(
         f"{prefix}wape": wape(y_true, y_pred),
         f"{prefix}mape": mape(y_true, y_pred),
         f"{prefix}rmse": rmse(y_true, y_pred),
+        f"{prefix}rmsle": rmsle(y_true, y_pred),
         f"{prefix}bias": bias(y_true, y_pred),
     }

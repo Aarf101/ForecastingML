@@ -333,3 +333,7 @@ aws-dashboard:
 	$(PY) -m infra.aws.dashboard_host
 
 .PHONY: aws-workflows-print aws-workflows-up aws-inference-run aws-dashboard
+
+.PHONY: report-final
+report-final:
+	$(PY) docs/build_final_report.py

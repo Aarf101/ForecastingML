@@ -68,6 +68,7 @@ SEARCH_SPACE = {
 # Hyperparamètres figés pendant la recherche : un seul horizon pour que chaque
 # essai reste court (~3 min), sinon 4 boosters par job quadruplent la facture.
 STATIC = {
+    "quantiles": "false",
     "horizons": "1",
     "early-stopping-rounds": "40",
     "valid-days": "56",
@@ -204,7 +205,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(request, indent=2))
         return 0
 
-    upload_code(s3_client(), SETTINGS.bucket)
+    code_uri = upload_code(s3_client(), SETTINGS.bucket)
+    request = tuning_request(SETTINGS.bucket, name, code_uri, args.max_jobs, args.parallel, args.strategy)
     if args.upload_only:
         print(f"[tuning] code déposé : {code_uri}")
         return 0

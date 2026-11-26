@@ -176,3 +176,32 @@ def test_model_with_wrong_handler_directory_cannot_be_reused():
     sm.describe_model.return_value = {'PrimaryContainer': {
         'Image': 'image', 'ModelDataUrl': 's3://b/model', 'Environment': {'SAGEMAKER_PROGRAM': 'inference.py'}}}
     with pytest.raises(ValueError): ensure_model(sm, 'name', 'image', 's3://b/model')
+
+
+def test_serverless_installs_dependencies_on_importable_writable_path(monkeypatch):
+    """Le site utilisateur non importé ne doit pas masquer le handler."""
+    from infra.sagemaker.batch_transform import ensure_model
+    monkeypatch.setattr('infra.sagemaker.batch_transform._role', lambda: 'arn:aws:iam::123456789012:role/test')
+    sm = Mock()
+    sm.describe_model.side_effect = ClientError({'Error': {'Code': 'ValidationException'}}, 'DescribeModel')
+    ensure_model(sm, 'serverless', 'image', 's3://b/model', serverless=True)
+    env = sm.create_model.call_args.kwargs['PrimaryContainer']['Environment']
+    assert env['PIP_TARGET'] == '/opt/ml/model/code'
+    assert env['PIP_NO_DEPS'] == '1'
+    assert env['PIP_USER'] == '0'
+    assert env['PIP_TARGET'] in env['PYTHONPATH'].split(':')
+    assert '/opt/ml/model/code' in env['PYTHONPATH'].split(':')
+
+
+def test_endpoint_cleanup_waits_before_removing_dependencies(monkeypatch):
+    """Un endpoint en suppression conserve ses dépendances jusqu'à sa disparition."""
+    from infra.sagemaker import deploy
+    sm = Mock()
+    monkeypatch.setattr(deploy, '_sm', lambda: sm)
+    events = []
+    sm.delete_endpoint.side_effect = lambda **kw: events.append('endpoint')
+    sm.get_waiter.return_value.wait.side_effect = lambda **kw: events.append('wait')
+    sm.delete_endpoint_config.side_effect = lambda **kw: events.append('config')
+    sm.delete_model.side_effect = lambda **kw: events.append('model')
+    assert deploy.down() == 0
+    assert events == ['endpoint', 'wait', 'config', 'model']

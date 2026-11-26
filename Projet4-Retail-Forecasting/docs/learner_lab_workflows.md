@@ -5,6 +5,26 @@ Le parcours recommandé est désormais `infra.aws.workflows`, puis
 compatible, mais son gate et `register.py` ne peuvent plus approuver automatiquement
 sur la seule foi des métriques d'entraînement : ils produisent PendingManualApproval.
 
+## Nouvelle exécution du 26 novembre 2026
+
+Le mensuel `771772ac-c47c-4c1c-9442-fb1939c7abf6` a réussi **sans reprise**.
+Toutes les étapes du pipeline `9ber5kxlm3mu`, y compris l’inscription, ont réussi.
+Le package v7 ajoute les P10/P90 : 48 boosters, 19 200 lignes de prévisions,
+1 200 séries et 16 horizons. Les détails et statuts du quotidien et de l’endpoint
+sont dans [la preuve courante](evidence/completion_2026-11-26.json).
+Le test antérieur avec reprise reste documenté plus bas pour traçabilité.
+
+Le HPO terminé du 26 novembre comprend six essais sur J+1, objectif `valid_wape`.
+Le meilleur résultat de validation est 0,416682 ; ce modèle exploratoire n’est pas
+publié automatiquement à la place du modèle complet sur 16 horizons.
+
+L’image SKLearn serverless installe par défaut les dépendances dans un site
+utilisateur non importé. `ensure_model(serverless=True)` utilise le répertoire
+importé `/opt/ml/model/code`, conserve les bibliothèques numériques de l’image
+avec `PIP_NO_DEPS=1`, et installe LightGBM 4.5.0. Le Batch Transform garde son
+chemin de démarrage validé. Les échecs de démarrage précédents ne sont pas des
+validations d’inférence ; seule la preuve d’appel réel fait foi.
+
 ## Contrat
 
 - `retail-training` : Glue -> Processing pilote -> SageMaker Pipeline

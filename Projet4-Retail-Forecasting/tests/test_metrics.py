@@ -62,6 +62,19 @@ def test_empty_raises():
 
 def test_evaluate_keys_and_prefix():
     res = evaluate([1, 2], [1.1, 2.1], prefix="valid_")
-    assert set(res) == {"valid_wape", "valid_mape", "valid_rmse", "valid_bias"}
+    assert set(res) == {"valid_wape", "valid_mape", "valid_rmse", "valid_rmsle", "valid_bias"}
     assert res["valid_wape"] == pytest.approx(0.2 / 3)
     assert res["valid_bias"] == pytest.approx(0.2 / 3)
+
+
+def test_rmsle_zeros_and_known_log_error():
+    from retail_forecast.evaluate.metrics import rmsle
+    assert rmsle([0, 1], [0, 1]) == 0
+    import math
+    assert rmsle([0], [1]) == pytest.approx(math.log(2))
+
+
+@pytest.mark.parametrize("value", [-1, float("nan"), float("inf")])
+def test_rmsle_rejects_invalid_quantities(value):
+    from retail_forecast.evaluate.metrics import rmsle
+    with pytest.raises(ValueError): rmsle([0], [value])

@@ -144,13 +144,13 @@ def notes(slide, text):
 def slide_1(prs):
     s = blank(prs)
     header(s, "Retail ML Forecasting — anticiper la demande, magasin par magasin",
-           "Projet 4 · idée projet", 1)
+           "Projet 4 · soutenance finale", 1)
 
     bullets(s, M, 1.45, 6.25, 2.9, "Le besoin", [
         "Réassort aujourd'hui à l'expertise : aucune prévision chiffrée",
         "Rupture de stock → ventes perdues, clients mécontents",
         "Surstock → trésorerie immobilisée et démarques",
-        "Objectif : prévoir J+1 à J+28 par (magasin, article), **avec une incertitude exploitable**",
+        "Objectif : prévoir J+1 à J+16 par (magasin, article), **avec une incertitude exploitable**",
     ], ORANGE)
 
     bullets(s, 7.15, 1.45, 5.5, 2.4, "Pour qui ?", [
@@ -162,17 +162,17 @@ def slide_1(prs):
     rect(s, 7.15, 3.35, 5.5, 1.22, RGBColor(0xE8, 0xF0, 0xFA))
     textbox(s, 7.38, 3.51, 5.05, 0.95,
             "L'application : une console de pilotage de la demande — dashboard "
-            "+ agent conversationnel qui explique chaque prévision et propose "
-            "une action de réassort.", 11.5, False, INK, spacing=1.1)
+            "+ brief LangChain/Ollama fondé sur les agrégats, "
+            "sans agent autonome ni estimation de demande perdue.", 11.5, False, INK, spacing=1.1)
 
     kpi_strip(s, 4.90, [
-        ("< 30 %", "WAPE cible (erreur pondérée)", ORANGE),
-        ("28 jours", "horizon de prévision", BLUE),
+        ("0,45", "seuil de promotion WAPE", ORANGE),
+        ("16 jours", "horizons quotidiens", BLUE),
         ("1 200", "séries magasin × article", PURPLE),
     ])
     textbox(s, M, 6.10, W - 2 * M, 0.4,
-            "Promesse mesurable : −24,3 % d'erreur de prévision par rapport à la baseline "
-            "saisonnière, dès la première itération (33 600 points de test).",
+            "Référence AWS vérifiée : WAPE 0,422609 contre 0,559139 pour la baseline "
+            "saisonnière ; les données évaluées sont synthétiques.",
             13.5, True, DARK)
     footer(s)
     notes(s, "On part d'un constat terrain : le réassort se fait à l'expérience. "
@@ -192,31 +192,29 @@ def slide_2(prs):
     s.shapes.add_picture(str(IMG), Inches((W - width) / 2), Inches(1.18),
                          width=Inches(width), height=Inches(height))
     textbox(s, M, 1.18 + height + 0.04, W - 2 * M, 0.25,
-            "Ingestion temps réel → lac de données → entraînement SageMaker → agent LLM → "
-            "dashboard. Chaque brique payante (MSK, Bedrock, QuickSight) a un substitut "
-            "gratuit documenté (Kafka open-source, Ollama, Streamlit).",
+            "Kafka EC2 → Firehose → S3 → Glue → SageMaker → prévisions → Streamlit. "
+            "LangChain/Ollama rédige le brief optionnel ; les horaires récurrents sont désactivés.",
             8.5, False, GREY)
-    notes(s, "Deux natures de flux : le batch quotidien (prévision 28 jours) et le "
-             "temps réel (endpoint pour les questions de l'agent). Le diagramme est "
+    notes(s, "Deux natures de flux : le batch quotidien (prévisions de J+1 à J+16) et le "
+             "temps réel (requête de serving). Le diagramme est "
              "généré par code, donc versionné avec le projet.")
 
 
 def slide_3(prs):
     s = blank(prs)
-    header(s, "Des jeux publics riches, un simulateur en plan B", "Les données", 3)
+    header(s, "Des ventes synthétiques et un protocole temporel reproductible", "Les données", 3)
 
     bullets(s, M, 1.45, 5.95, 3.2, "Sources", [
-        "**M5 (Walmart, Kaggle)** : 30 490 séries, 1 941 jours, prix, promotions, calendrier (~450 Mo)",
-        "**Rossmann (Kaggle)** : 1 115 magasins, 942 jours, promotions et état des magasins",
-        "**Plan B — simulateur maison** : 876 000 lignes (20 magasins × 60 articles × 730 j), "
-        "même schéma que M5, saisonnalité et ruptures contrôlées",
+        "**Données utilisées** : 876 000 ventes synthétiques, 20 magasins et 60 articles",
+        "**Période** : du 01/01/2023 au 30/12/2024 ; prévisions relatives à cette origine",
+        "**Catalogue actif** : 1 200 séries ; les anciens historiques sans lien restent dans S3",
     ], GREEN, size=15)
 
     bullets(s, 6.85, 1.45, 5.8, 3.6, "Signal et features", [
-        "Cible : ventes à **J+h**, h = 1…28 (direct multi-horizon)",
+        "Cible : ventes à **J+h**, h = 1…16 (direct multi-horizon)",
         "Lags 1/7/14/21/28/35, moyennes et écarts-types glissants 7/14/28",
         "Calendrier, jours fériés, promo, prix, lead time magasin",
-        "Découpage **temporel** : dernier mois = test, mois précédent = validation",
+        "Découpage **temporel purgé** : validation 56 jours, test 28 jours",
         "Doublons d'ingestion dédupliqués sur (magasin, article, date)",
     ], PURPLE, size=15)
 
@@ -228,9 +226,9 @@ def slide_3(prs):
 
     rect(s, M, 5.72, W - 2 * M, 0.85, RGBColor(0xFD, 0xF0, 0xE6))
     textbox(s, M + 0.25, 5.86, W - 2 * M - 0.5, 0.6,
-            "Piège identifié : 3,6 % de jours en rupture dans le jeu simulé → ventes "
-            "censurées. On le traite explicitement (rupture = plafond, pas une vraie "
-            "baisse de demande) et on exclut les variables de stock des features.",
+            "Les ventes sont censurées pendant les ruptures : ce modèle prédit les ventes "
+            "observées, pas la demande perdue. Stock et indicateur de rupture sont exclus "
+            "des features ; aucune vente à zéro n’est inventée pour les jours absents.",
             11, False, INK, spacing=1.05)
     footer(s)
     notes(s, "Le point à faire passer : on sait déjà quel piège va nous mordre — la "
@@ -240,68 +238,67 @@ def slide_3(prs):
 
 def slide_4(prs):
     s = blank(prs)
-    header(s, "Ce que l'application offrira, et avec quels services",
+    header(s, "Prévisions, incertitude et rapport textuel contrôlé",
            "Fonctionnalités et services", 4)
 
     bullets(s, M, 1.45, 5.95, 3.9, "Fonctionnalités", [
-        "Prévisions 28 jours par magasin/article avec **P10 / P50 / P90** → stock de sécurité",
-        "Tableau de bord : prévu vs réalisé, top dérives, risques de rupture",
-        "Agent conversationnel : « quel risque sur I012 au magasin S03 la semaine prochaine ? » "
-        "→ chiffre, cause, action",
-        "Brief hebdomadaire généré automatiquement et alertes seuil",
+        "Prévisions J+1…J+16 : **moyenne et P10/P90**, 48 boosters LightGBM",
+        "Tableau de bord : historique, prévisions, bande P10/P90 et filtres",
+        "LangChain : agrégats → PromptTemplate → Ollama → validation du texte",
+        "Brief publié dans S3 ; aucun chiffre absent du contexte ne doit être publié",
     ], PINK, size=14.5)
 
     bullets(s, 6.85, 1.45, 5.8, 4.2, "Services mobilisés", [
-        "Stockage et ingestion : **S3**, **Glue / Lambda**, **Kinesis / MSK**",
-        "ML : **SageMaker** (Processing, Training, HPO, Pipelines, Registry, Endpoint, Model Monitor)",
-        "IA : **Bedrock** + LangChain / LangGraph, RAG FAISS (promos, lead times)",
-        "Restitution : **QuickSight** (option production) ou **Streamlit**",
+        "Stockage et ingestion : **S3**, **Glue**, **Kafka EC2 + Firehose**",
+        "ML : **SageMaker** (Processing, Training, HPO, Pipelines, Registry, Endpoint)",
+        "IA : **LangChain + Ollama**, rapport textuel ; pas de RAG ni agent autonome",
+        "Restitution : **Streamlit sur notebook SageMaker**, KPI Athena",
         "Orchestration et MLOps : **EventBridge**, **Step Functions**, **CloudWatch**",
     ], BLUE, size=14)
 
     process_strip(s, 4.85, [
-        ("1", "Prévision 28 j avec P10 / P50 / P90"),
-        ("2", "Dashboard : risques de rupture et dérives"),
-        ("3", "Question à l'agent en langage naturel"),
-        ("4", "Décision de réassort, tracée et argumentée"),
+        ("1", "16 jours + moyenne + P10/P90"),
+        ("2", "Filtres et courbe d’incertitude"),
+        ("3", "Brief LangChain/Ollama"),
+        ("4", "Publication versionnée dans S3"),
     ], PINK)
     footer(s)
     notes(s, "La valeur ajoutée n'est pas le modèle seul, c'est la boucle complète : la "
-             "prévision alimente une décision, et l'agent explique la décision. C'est ce "
+             "prévision alimente une décision et le brief résume les agrégats. C'est ce "
              "qui distingue le projet d'un notebook.")
 
 
 def slide_5(prs):
     s = blank(prs)
-    header(s, "Déjà exécuté en local, le reste tient au crédit Learner Lab",
-           "Preuve de faisabilité et suite", 5)
+    header(s, "Résultats, preuves AWS et limites",
+           "Validation et démonstration", 5)
 
-    bullets(s, M, 1.45, 5.95, 3.0, "Résultats obtenus (sans AWS)", [
-        "876 000 lignes générées, **42 tests unitaires** verts",
-        "Ingestion **Kafka → S3** validée : 2 000 événements → 4 objets gzip partitionnés",
-        "Diagramme et documentation d'architecture prêts",
-        "Features et métriques réutilisables tels quels sur SageMaker",
+    bullets(s, M, 1.45, 5.95, 3.0, "Parcours vérifié dans le Learner Lab", [
+        "**19 200 prévisions** : 1 200 séries × 16 jours ; manifeste actif versionné",
+        "Ingestion Kafka/Firehose : **20 000 événements** validés précédemment",
+        "Évaluation indépendante, gate WAPE et publication conditionnelle S3",
+        "Tests unitaires sans services externes ; preuves cloud archivées",
     ], GREEN, size=15)
 
-    bullets(s, 6.85, 1.45, 5.8, 2.6, "Prochaines étapes (7 semaines)", [
-        "S1–S2 : données, conception du pipeline, S3",
-        "S3–S4 : ingestion / ETL puis modélisation SageMaker + HPO",
-        "S5–S6 : agent LLM puis dashboard",
-        "S7 : rapport, vidéo de 2 min, soutenance",
+    bullets(s, 6.85, 1.45, 5.8, 2.6, "Limites à expliquer au jury", [
+        "Validation sur données synthétiques ; M5/Rossmann non benchmarkés",
+        "HPO exploratoire sur J+1 ; ne prouve pas l’optimum sur 16 horizons",
+        "P10/P90 : 80 % nominal, couverture réelle mesurée sur le test",
+        "Rapport LLM à relire ; aucune demande perdue reconstituée",
     ], ORANGE, size=15)
 
     kpi_strip(s, 4.75, [
-        ("0.430", "WAPE — modèle LightGBM", GREEN),
-        ("0.568", "WAPE — baseline saisonnière", GREY),
-        ("−24,3 %", "d'erreur en moins", ORANGE),
+        ("0.422609", "WAPE — référence AWS", GREEN),
+        ("0.559139", "WAPE — baseline saisonnière", GREY),
+        ("−24,4 %", "gain relatif vérifié", ORANGE),
     ])
     textbox(s, M, 6.02, W - 2 * M, 0.5,
-            "Prochaine étape : porter ce pipeline sur SageMaker (Processing, Training, Pipelines, "
-            "Registry) et brancher l'agent LLM sur les prévisions.",
+            "Démonstration : filtres Streamlit, incertitude, version du modèle et prévisions actives. "
+            "Les identifiants exacts et les résultats sont consignés dans le rapport final.",
             11.5, True, DARK)
     footer(s)
-    notes(s, "On arrive avec un pipeline qui tourne déjà, pas avec des slides. Le temps "
-             "restant sert à porter ce pipeline sur AWS et à soigner la démonstration.")
+    notes(s, "Présenter les preuves du rapport final, puis reconnaître les limites métier. "
+             "Le script de soutenance fournit un parcours de dix minutes avec vidéo.")
 
 
 def main() -> int:

@@ -1,0 +1,9 @@
+{
+  "notebook": "Stopped",
+  "endpoint": "Deleted",
+  "project_active_jobs": [],
+  "schedules": {
+    "retail-training": "DISABLED",
+    "retail-inference": "DISABLED"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "status": "SUCCEEDED",
+  "active_counts": [
+    [
+      "rows",
+      "versions",
+      "version",
+      "horizons"
+    ],
+    [
+      "19200",
+      "1",
+      "v7",
+      "16"
+    ]
+  ]
+}

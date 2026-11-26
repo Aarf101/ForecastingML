@@ -61,7 +61,7 @@ def up(wait: bool = True, model_url: str | None = None) -> int:
     model_url = approved_url
     print(f"[deploy] version active v{version} : {model_url}")
 
-    ensure_model(sm, MODEL_NAME, image, model_url)
+    ensure_model(sm, MODEL_NAME, image, model_url, serverless=True)
 
     try:
         sm.describe_endpoint_config(EndpointConfigName=CONFIG_NAME)
@@ -158,17 +158,27 @@ def status() -> int:
 def down() -> int:
     """Supprime endpoint, configuration et modèle (facturation à zéro)."""
     sm = _sm()
+    try:
+        sm.delete_endpoint(EndpointName=ENDPOINT)
+    except sm.exceptions.ClientError as exc:
+        if exc.response['Error']['Code'] != 'ValidationException':
+            raise
+    else:
+        # L'endpoint doit être supprimé avant ses ressources dépendantes.
+        sm.get_waiter('endpoint_deleted').wait(
+            EndpointName=ENDPOINT, WaiterConfig={'Delay': 10, 'MaxAttempts': 60})
+        print('[deploy] endpoint supprimé')
     for label, appel in (
-        ("endpoint", lambda: sm.delete_endpoint(EndpointName=ENDPOINT)),
-        ("configuration",
-         lambda: sm.delete_endpoint_config(EndpointConfigName=CONFIG_NAME)),
+        ("configuration", lambda: sm.delete_endpoint_config(EndpointConfigName=CONFIG_NAME)),
         ("modèle", lambda: sm.delete_model(ModelName=MODEL_NAME)),
     ):
         try:
             appel()
             print(f"[deploy] {label} supprimé")
         except sm.exceptions.ClientError as exc:
-            print(f"[deploy] {label} : {exc.response['Error']['Code']}")
+            if exc.response['Error']['Code'] != 'ValidationException':
+                raise
+            print(f"[deploy] {label} absent")
     return 0
 
 

@@ -30,9 +30,14 @@ Ces horizons sont des dates isolées, pas des cumuls hebdomadaires.
 Magasins aux volumes prévus les plus élevés : {magasins}.
 Séries aux volumes prévus les plus élevés : {volatiles}.
 Évaluation : {qualite}.
-Rédige trois phrases d'analyse puis deux actions pour le responsable des achats,
-en un paragraphe français sans titres ni listes. N'invente aucun chiffre,
-aucune mesure de volatilité, ni aucune métrique absente.
+FAITS_VALIDES_JSON: {faits_json}
+ACTIONS_VALIDES_JSON: {actions_json}
+Réponds uniquement en JSON avec deux clés : "analyse" et "actions".
+Pour "analyse", recopie EXACTEMENT les trois phrases de FAITS_VALIDES_JSON,
+dans leur ordre, sans reformulation ni ajout. Pour "actions", choisis exactement
+deux phrases différentes de ACTIONS_VALIDES_JSON, recopiées sans modification.
+Ne crée aucune phrase : les agrégats ne permettent pas une analyse individuelle
+de qualité, de tendance, de rupture ou de production.
 """
 
 
@@ -47,7 +52,20 @@ def _forecast_key():
 
 def _ollama(prompt: str, model: str, base_url: str, timeout: int = 180) -> str:
     """Appelle l'API /api/generate d'Ollama (pas de SDK : une requête HTTP)."""
-    payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode()
+    output_format = "json"
+    choices = {line.split(": ", 1)[0]: json.loads(line.split(": ", 1)[1])
+               for line in prompt.splitlines()
+               if line.startswith(("FAITS_VALIDES_JSON: ", "ACTIONS_VALIDES_JSON: "))}
+    if choices:
+        # Le décodage contraint complète la validation après génération.
+        output_format = {"type": "object", "additionalProperties": False,
+            "properties": {
+                "analyse": {"const": choices["FAITS_VALIDES_JSON"]},
+                "actions": {"type": "array", "items": {"type": "string", "enum": choices["ACTIONS_VALIDES_JSON"]},
+                            "minItems": 2, "maxItems": 2}},
+            "required": ["analyse", "actions"]}
+    payload = json.dumps({"model": model, "prompt": prompt, "stream": False,
+                          "format": output_format, "options": {"temperature": 0, "seed": 42}}).encode()
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}/api/generate",
         data=payload,
@@ -132,7 +150,7 @@ def _load_metrics() -> dict:
     return json.loads(path.read_text()) if path.exists() else {}
 
 
-def build_prompt(forecast: pd.DataFrame) -> str:
+def prompt_inputs(forecast: pd.DataFrame) -> dict:
     """Agrège les prévisions puis remplit le gabarit du prompt."""
     totaux = (
         forecast.groupby("horizon")["forecast_units"].sum().round(0).astype(int).to_dict()
@@ -160,12 +178,71 @@ def build_prompt(forecast: pd.DataFrame) -> str:
             quality += f", biais {metrics['test_bias']:+.1%}"
     else:
         quality = "métriques indisponibles ; qualité non évaluée"
-    return PROMPT.format(
+    return dict(
         totaux=", ".join(f"J+{h} : {v} u" for h, v in sorted(totaux.items())),
         magasins=", ".join(f"{s} ({v} u)" for s, v in magasins.items()),
         volatiles=", ".join(f"{s}/{i} ({v:.0f} u)" for (s, i), v in series.items()),
         qualite=quality,
+        faits_json=json.dumps([
+            f"Le volume total prévu sur les {len(totaux)} horizons est de {forecast.forecast_units.sum():.0f} unités.",
+            f"Le magasin au plus fort volume cumulé prévu est {next(iter(magasins))} avec {next(iter(magasins.values()))} unités.",
+            f"Évaluation globale : {quality}.",
+        ], ensure_ascii=False),
+        actions_json=json.dumps([
+            "Vérifier les stocks disponibles avant de décider des réassorts.",
+            "Planifier les livraisons après vérification des délais fournisseurs.",
+            "Examiner les intervalles P10/P90 avec le responsable des achats.",
+            "Comparer les prévisions aux ventes observées dès leur disponibilité.",
+        ], ensure_ascii=False),
     )
+
+
+def build_prompt(forecast: pd.DataFrame) -> str:
+    """Gabarit pur utilisable dans les tests sans backend LLM."""
+    return PROMPT.format(**prompt_inputs(forecast))
+
+
+def validate_brief(text: str, context: str) -> str:
+    """Refuse les sorties mal formées et les chiffres absents du contexte."""
+    import re
+    document = json.loads(text)
+    if set(document) != {"analyse", "actions"}:
+        raise ValueError("structure du rapport LLM invalide")
+    for key, size in [("analyse", 3), ("actions", 2)]:
+        if not isinstance(document[key], list) or len(document[key]) != size or not all(isinstance(v, str) and v.strip() for v in document[key]):
+            raise ValueError("nombre de phrases LLM incorrect")
+    result = " ".join(document["analyse"]) + "\n\n" + " ".join(document["actions"])
+    numbers = lambda value: {float(v.replace(",", ".")) for v in re.findall(r"\d+(?:[.,]\d+)?", value)}
+    if not numbers(result).issubset(numbers(context)):
+        raise ValueError("chiffre LLM absent du contexte : publication bloquée")
+    if re.search(r"stable|stabilité|volatil", result, re.IGNORECASE):
+        raise ValueError("propriété non mesurée dans le rapport LLM")
+    allowed = {}
+    for line in context.splitlines():
+        for prefix in ("FAITS_VALIDES_JSON: ", "ACTIONS_VALIDES_JSON: "):
+            if line.startswith(prefix):
+                allowed[prefix] = json.loads(line[len(prefix):])
+    if allowed:
+        if (document['analyse'] != allowed['FAITS_VALIDES_JSON: ']
+                or len(set(document['actions'])) != 2
+                or any(action not in allowed['ACTIONS_VALIDES_JSON: '] for action in document['actions'])):
+            raise ValueError("affirmation LLM non autorisée : publication bloquée")
+    return result
+
+
+def generate_brief(forecast: pd.DataFrame, provider: str, *, model=None, base_url=None) -> str:
+    """Chaîne LangChain : agrégation, gabarit de prompt, génération textuelle."""
+    from langchain_core.prompts import PromptTemplate
+    from langchain_core.runnables import RunnableLambda
+
+    def complete(prompt):
+        context = prompt.to_string()
+        raw = generate(context, provider, model=model, base_url=base_url)
+        return validate_brief(raw, context)
+
+    chain = (RunnableLambda(prompt_inputs) | PromptTemplate.from_template(PROMPT)
+             | RunnableLambda(complete))
+    return chain.invoke(forecast)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -179,9 +256,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     forecast = _load_forecast()
-    prompt = build_prompt(forecast)
     print(f"[brief] provider {args.provider} · {len(forecast):,} prévisions agrégées")
-    text = generate(prompt, args.provider, model=args.model, base_url=args.base_url)
+    text = generate_brief(forecast, args.provider, model=args.model, base_url=args.base_url)
 
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     content = f"# Brief ventes — {day}\n\n{text}\n"
