@@ -337,3 +337,7 @@ aws-dashboard:
 .PHONY: report-final
 report-final:
 	$(PY) docs/build_final_report.py
+
+.PHONY: benchmark-chronos
+benchmark-chronos:
+	$(PY) -m retail_forecast.evaluate.benchmark_chronos --series-limit 120 --batch-size 128

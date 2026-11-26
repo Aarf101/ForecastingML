@@ -23,3 +23,9 @@ nohup.out
 
 # LibreOffice / bureautique
 .~lock.*
+
+# Modèles et données temporaires du benchmark Chronos
+data/benchmark/
+
+# Sondes locales de capacité, distinctes du benchmark publié
+reports/chronos2_pilot*.json

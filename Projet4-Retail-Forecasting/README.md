@@ -21,7 +21,7 @@ ci-dessous précèdent la correction du split et de la baseline.
 Le workflow mensuel complet a réussi sans reprise, avec **v7**, **19 200 prévisions**
 et des quantiles **P10/P90** sur les 16 horizons. L’évaluation indépendante mesure
 une couverture empirique de **78,3 %**, pour 80 % nominal. Le HPO a terminé ses
-six essais sur J+1 ; son objectif est `valid_wape`. **150 tests locaux passent.**
+six essais sur J+1 ; son objectif est `valid_wape`. **153 tests locaux passent**, dont les contrôles du benchmark Chronos.
 
 - [Rapport final PDF](output/pdf/rapport_final.pdf) et [version texte](docs/rapport_final.md).
 - [Diapositives éditables](docs/slides.pptx) et [PDF](output/pdf/slides.pdf).
@@ -60,6 +60,16 @@ Le test réel EventBridge -> Glue -> inférence -> publication a réussi, en
 conservant le modèle v6 : [preuves AWS](docs/evidence/aws_workflows.json).
 Le notebook `retail-forecast-nb` héberge le dashboard (`/proxy/8501/` depuis
 Jupyter). Les horaires récurrents restent désactivés.
+
+## Essai d’un modèle préentraîné
+
+Le benchmark Chronos-2 compare un candidat zero-shot à LightGBM v7 sur les mêmes
+couples origine/cible. Le [protocole et les résultats](docs/chronos_benchmark.md)
+distinguent cet essai exploratoire du modèle actif. Commande : `make benchmark-chronos`
+après installation des dépendances optionnelles et récupération des poids.
+Sur les 120 séries appariées : WAPE **41,30 %** pour Chronos-2 contre **42,34 %**
+pour LightGBM, soit **2,45 %** de réduction relative d’erreur. Ce résultat est
+exploratoire ; v7 reste le modèle déployé.
 
 ## Rapport LLM optionnel
 

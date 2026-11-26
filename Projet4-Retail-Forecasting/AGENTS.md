@@ -8,7 +8,8 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision des ventes observées J
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (150 tests, aucun service externe requis) |
+| `make test` | pytest (153 tests, aucun service externe requis) |
+| `make benchmark-chronos` | comparaison exploratoire Chronos-2 / v7, 120 séries, aucun calcul AWS |
 | `make train` | évaluation locale LightGBM → `reports/local_baseline.json` |
 | `make train-quick` | même chose sur 20 % des séries, 200 arbres (itération) |
 | `make up` / `make down` | Redpanda (:19092, console :8080) + s3mock (:9090) |
@@ -41,6 +42,7 @@ src/retail_forecast/
   data/load.py         charge un dataset quelconque (CSV/Parquet/JSON, local ou S3) -> schéma canonique
   features/build.py    lags 1→35, rolling mean/std 7/14/28, calendrier, time_split()
   evaluate/metrics.py  WAPE, MAPE, RMSE, RMSLE, pinball loss
+  evaluate/benchmark_chronos.py comparaison appariée, sans publication ni réentraînement
   train/train_lgbm.py  miroir local du Training Job SageMaker + baseline saisonnière
   ingest/storage.py    unique porte boto3 : raw_key(), gzip JSONL, chunking
   ingest/producer.py   rejoue le parquet → Kafka (--limit, --rate, --loop)
@@ -116,6 +118,15 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
 - ✅ Rapport PDF, slides corrigées et script de dix minutes : `output/`, `docs/soutenance_10min.md`.
 - ✅ Fin du test : notebook arrêté, endpoint supprimé, aucun job actif, horaires désactivés.
 - ⏳ Reste à l’étudiant : répétition orale et présentation.
+
+## Benchmark Chronos-2 (exploratoire)
+
+- `docs/chronos_benchmark.md`, `reports/chronos2_benchmark.json` : 120 séries,
+  20 magasins, 48 articles, 16 horizons × 28 origines, 53 760 couples appariés.
+- WAPE : Chronos-2 **0,413009**, LightGBM v7 **0,423396** sur ce même sous-ensemble.
+  Gain relatif **2,45 %** ; couverture 79,65 % contre 79,01 %.
+- Exécuté localement sur CPU, sans fine-tuning et sans nouveau job AWS.
+  Le modèle actif reste **v7**. Ne pas extrapoler ce résultat aux 1 200 séries.
 
 ## Décisions déjà arbitrées (ne pas les reproposer)
 
