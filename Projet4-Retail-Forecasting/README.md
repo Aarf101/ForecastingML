@@ -21,7 +21,7 @@ ci-dessous précèdent la correction du split et de la baseline.
 Le workflow mensuel complet a réussi sans reprise, avec **v7**, **19 200 prévisions**
 et des quantiles **P10/P90** sur les 16 horizons. L’évaluation indépendante mesure
 une couverture empirique de **78,3 %**, pour 80 % nominal. Le HPO a terminé ses
-six essais sur J+1 ; son objectif est `valid_wape`. **161 tests locaux passent**, dont les contrôles du benchmark Chronos.
+six essais sur J+1 ; son objectif est `valid_wape`. **164 tests locaux passent**, dont les contrôles des benchmarks Chronos et médian/calendrier.
 
 - [Rapport final PDF](output/pdf/rapport_final.pdf) et [version texte](docs/rapport_final.md).
 - [Diapositives éditables](docs/slides.pptx) et [PDF](output/pdf/slides.pdf).
@@ -199,6 +199,13 @@ Chaque slide a des notes d'orateur (onglet « Notes » dans PowerPoint).
 4. **Rapport LLM** via `ollama` ou `sagemaker` ; Bedrock n'est pas implémenté.
 
 ## Données
+
+Expérience L1/médiane et calendrier cible : `make benchmark-median`, puis
+`.venv/bin/python docs/build_median_report.py`. Le protocole utilise une
+réplication synthétique indépendante, sélectionne sur la validation et réserve
+les 28 derniers jours pour le témoin et le candidat retenu. Voir
+[le protocole et les résultats](docs/median_calendar_benchmark.md).
+Cette commande locale ne modifie pas le modèle actif sur AWS.
 
 Par défaut : `retail_forecast.data.simulate` (aucun token requis, 2 ans × 20
 magasins × 60 articles, ~3,6 % de ruptures). Pour utiliser un vrai jeu :

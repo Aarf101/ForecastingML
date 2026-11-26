@@ -8,7 +8,8 @@ Projet **Retail ML Forecasting** (Projet 4) : prévision des ventes observées J
 
 | Commande | Effet |
 |---|---|
-| `make test` | pytest (161 tests, aucun service externe requis) |
+| `make test` | pytest (164 tests, aucun service externe requis) |
+| `make benchmark-median` | ablation locale L2/L1/médiane + calendrier, réplication indépendante, sans publication |
 | `make aws-chronos-validate` | surveillance des six partitions, Batch Transform réel et nettoyage du candidat |
 | `make benchmark-chronos` | comparaison exploratoire Chronos-2 / v7, 120 séries, aucun calcul AWS |
 | `make train` | évaluation locale LightGBM → `reports/local_baseline.json` |
@@ -44,6 +45,8 @@ src/retail_forecast/
   features/build.py    lags 1→35, rolling mean/std 7/14/28, calendrier, time_split()
   evaluate/metrics.py  WAPE, MAPE, RMSE, RMSLE, pinball loss
   evaluate/benchmark_chronos.py comparaison appariée, sans publication ni réentraînement
+  evaluate/benchmark_median.py ablation L1/calendrier, validation puis test réservé
+  features/target_calendar.py calendrier cible optionnel (jours fériés du simulateur)
   train/train_lgbm.py  miroir local du Training Job SageMaker + baseline saisonnière
   ingest/storage.py    unique porte boto3 : raw_key(), gzip JSONL, chunking
   ingest/producer.py   rejoue le parquet → Kafka (--limit, --rate, --loop)
@@ -123,6 +126,22 @@ tests/ test_metrics, test_features, test_ingest, test_simulate, test_etl,
 - ✅ Rapport PDF, slides corrigées et script de dix minutes : `output/`, `docs/soutenance_10min.md`.
 - ✅ Fin du test : notebook arrêté, endpoint supprimé, aucun job actif, horaires désactivés.
 - ⏳ Reste à l’étudiant : répétition orale et présentation.
+
+## Expérience LightGBM médian/calendrier (locale)
+
+- `make benchmark-median` : 5 variantes × 16 horizons, 1 200 séries ;
+  réplication indépendante seed 20261126, mêmes bruit et ruptures.
+- Sélection uniquement sur validation : quantile alpha 0,5 + calendrier cible.
+  L1 + calendrier est pratiquement à égalité sur cette validation.
+- Test réservé de cette réplication : WAPE **0,394716** contre **0,413857**
+  pour le témoin L2 réentraîné ; gain relatif **4,63 %**, 16 horizons améliorés.
+- `docs/median_calendar_benchmark.md`, `reports/median_calendar_benchmark.json`.
+  Ce nouveau score ne remplace pas celui de v7 sur l'ancien jeu.
+- `evaluate/median_project_check.py` : diagnostic secondaire du candidat figé
+  contre l'artefact v7, sur l'ancien test déjà consulté ; aucune sélection.
+  WAPE **0,404560** contre v7 **0,422610**, 16 horizons améliorés ; le résultat
+  Chronos **0,414794** porte sur ces mêmes données, mais ce test reste réutilisé.
+- Pas d'exécution AWS, d'intervalles candidats ni de promotion : v7 reste actif.
 
 ## Benchmark Chronos-2 (exploratoire)
 
